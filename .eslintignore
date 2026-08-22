@@ -1,0 +1,4 @@
+supabase/functions/
+node_modules/
+android/
+ios/
