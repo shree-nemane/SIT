@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { Linking } from 'react-native';
+import NetInfo from '@react-native-community/netinfo';
 import { AuthStatus, MembershipStatus, UserMember } from './types';
 import { supabase } from '../../data/supabaseClient';
 import { api } from '../../data/api';
@@ -58,12 +59,32 @@ interface AuthStore {
 }
 
 let isDeepLinkListenerRegistered = false;
+let isExplicitSigningOut = false;
 
 const handleSessionUpdate = async (
   set: (state: Partial<AuthStore>) => void,
-  session: any
+  get: () => AuthStore,
+  session: any,
+  event?: string
 ) => {
   if (!session || !session.user) {
+    // Guard against Supabase firing SIGNED_OUT due to TOKEN_REFRESH_FAILED while offline.
+    // If we have no network AND we still have a locally-known userId, AND this is NOT an explicit user sign-out, keep the user signed in.
+    // The session will be refreshed automatically when connectivity is restored.
+    if (!isExplicitSigningOut && (event === 'TOKEN_REFRESH_FAILED' || event === 'SIGNED_OUT')) {
+      const netState = await NetInfo.fetch();
+      const isOffline = !netState.isConnected || !netState.isInternetReachable;
+      const currentUserId = get().userId;
+
+      if (isOffline && currentUserId) {
+        console.log(
+          '[AuthStore] Token refresh failed while offline. Keeping session alive — will retry when network is restored.'
+        );
+        // Do not sign out. The autoRefreshToken will succeed once connectivity is back.
+        return;
+      }
+    }
+
     set({
       authStatus: 'signed_out',
       membershipStatus: 'no_group',
@@ -173,7 +194,7 @@ const handleSessionUpdate = async (
 
 let authStateSubscription: { unsubscribe: () => void } | null = null;
 
-export const useAuthStore = create<AuthStore>((set) => ({
+export const useAuthStore = create<AuthStore>((set, get) => ({
   authStatus: 'signed_out',
   membershipStatus: 'no_group',
   userEmail: null,
@@ -219,8 +240,22 @@ export const useAuthStore = create<AuthStore>((set) => ({
       const {
         data: { session },
       } = await supabase.auth.getSession();
-      await handleSessionUpdate(set, session);
+      await handleSessionUpdate(set, get, session);
     } catch (e: any) {
+      // getSession() threw — likely a SQLite init race on cold start or an op-sqlite error.
+      // Before forcing a logout, attempt to recover the userId from any existing store state
+      // and check local SQLite for a member record. Only sign out if truly unrecoverable.
+      console.warn('[AuthStore] getSession() threw unexpectedly:', e.message);
+      const existingUserId = get().userId;
+      if (existingUserId) {
+        const localMember = await MemberRepository.getMember(existingUserId).catch(() => null);
+        if (localMember) {
+          console.log('[AuthStore] Recovered session from local SQLite after getSession() error.');
+          set({ isLoading: false, error: null });
+          return;
+        }
+      }
+      // Truly unrecoverable — sign out cleanly
       set({
         authStatus: 'signed_out',
         membershipStatus: 'no_group',
@@ -231,8 +266,8 @@ export const useAuthStore = create<AuthStore>((set) => ({
 
     // Subscribe to Supabase auth state changes (registered exactly once across app lifecycle)
     if (!authStateSubscription) {
-      const { data } = supabase.auth.onAuthStateChange(async (_event, session) => {
-        await handleSessionUpdate(set, session);
+      const { data } = supabase.auth.onAuthStateChange(async (event, session) => {
+        await handleSessionUpdate(set, get, session, event);
       });
       authStateSubscription = data?.subscription || null;
     }
@@ -298,6 +333,7 @@ export const useAuthStore = create<AuthStore>((set) => ({
   },
 
   signOut: async () => {
+    isExplicitSigningOut = true;
     set({ isLoading: true });
     try {
       await pushService.deactivateCurrentDeviceToken();
@@ -306,15 +342,24 @@ export const useAuthStore = create<AuthStore>((set) => ({
         console.log('[AuthStore] Deactivating push token failed gracefully:', e);
       }
     }
-    await api.signOut();
-    set({
-      authStatus: 'signed_out',
-      membershipStatus: 'no_group',
-      userId: null,
-      userEmail: null,
-      member: null,
-      isLoading: false,
-    });
+    try {
+      await api.signOut();
+    } catch (e) {
+      if (__DEV__) {
+        console.log('[AuthStore] Remote sign out failed (offline), clearing local session anyway:', e);
+      }
+    } finally {
+      set({
+        authStatus: 'signed_out',
+        membershipStatus: 'no_group',
+        userId: null,
+        userEmail: null,
+        member: null,
+        groupName: null,
+        isLoading: false,
+      });
+      isExplicitSigningOut = false;
+    }
   },
 
   setError: (err) => set({ error: err }),

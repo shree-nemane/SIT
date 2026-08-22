@@ -114,12 +114,13 @@ const styles = StyleSheet.create({
   buttonColumn: {
     width: '100%',
     gap: spacing.xs,
+    flexDirection : "row-reverse"
   },
   confirmButton: {
-    width: '100%',
+    width: '50%',
   },
   cancelButton: {
-    width: '100%',
+    width: '50%',
   },
 });
 

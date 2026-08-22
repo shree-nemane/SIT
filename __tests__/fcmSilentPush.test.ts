@@ -2,7 +2,6 @@ import { NativeModules } from 'react-native';
 import messaging from '@react-native-firebase/messaging';
 import pushService, { validateSITPayload } from '../src/features/notifications/pushService';
 import syncEngine from '../src/features/sync/syncEngine';
-import { api } from '../src/data/api';
 
 // Mock syncEngine.syncAll
 jest.mock('../src/features/sync/syncEngine', () => ({

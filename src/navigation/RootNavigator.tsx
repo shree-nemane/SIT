@@ -6,7 +6,7 @@ import { TabNavigator } from './TabNavigator';
 import { CheckInScreen } from '../features/presence/CheckInScreen';
 import { AuthScreen } from '../features/auth/AuthScreen';
 import { JoinGroupScreen } from '../features/auth/JoinGroupScreen';
-import { LoadingScreen } from '../components/LoadingScreen';
+import { SplashScreen } from '../components/SplashScreen';
 import { useAuthStore } from '../features/auth/authStore';
 import { colors } from '../theme/theme';
 
@@ -34,7 +34,7 @@ export const RootNavigator = () => {
   }, [authStatus, membershipStatus]);
 
   if (isLoading) {
-    return <LoadingScreen message="Checking session..." />;
+    return <SplashScreen />;
   }
 
   return (

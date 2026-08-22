@@ -131,7 +131,7 @@ export const HomeScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
               <Text style={styles.appTitle}>Stay in Touch</Text>
               <Text style={styles.greetingText}>{getDynamicGreeting(userName)}</Text>
             </View>
-            <Badge label={`🔒 ${groupName || 'Private Circle'}`} variant="group" />
+            <Badge label={`${groupName || 'Private Circle'}`} variant="group" />
           </View>
 
           {/* YOUR STATUS SECTION */}
