@@ -20,24 +20,22 @@ export const Card: React.FC<CardProps> = ({
   const getCardStyle = (): ViewStyle => {
     let base: ViewStyle = {
       backgroundColor: colors.surface,
-      borderRadius: 20,
+      borderRadius: 16,
       padding: spacing.md,
       marginBottom: spacing.md,
-      borderWidth: 0,
-      ...shadows.card,
+      borderWidth: 1,
+      borderColor: colors.surfaceBorder,
     };
 
     if (variant === 'elevated') {
       base.backgroundColor = colors.surfaceElevated;
-      base = { ...base, ...shadows.cardElevated };
+      base.borderColor = colors.surfaceBorder;
     } else if (variant === 'highlighted') {
-      base.backgroundColor = colors.surfaceAmber;
-      base.borderColor = colors.primary;
-      base.borderWidth = 1;
-      base = { ...base, ...shadows.cardElevated };
+      base.backgroundColor = colors.surfaceElevated;
+      base.borderColor = colors.surfaceBorderLight;
     } else if (variant === 'interactive') {
       base.backgroundColor = colors.surfaceElevated;
-      base = { ...base, ...shadows.card };
+      base.borderColor = colors.surfaceBorder;
     }
 
     return base;

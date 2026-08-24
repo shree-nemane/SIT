@@ -9,8 +9,13 @@ import { initNetworkSyncListener } from './src/features/sync/netInfoListener';
 import { syncEngine } from './src/features/sync/syncEngine';
 import { colors } from './src/theme/theme';
 
+import { useNotificationPreferencesStore } from './src/features/notifications/notificationPreferencesStore';
+
 function App() {
   useEffect(() => {
+    // Early restore of notification preferences
+    useNotificationPreferencesStore.getState().loadPreferences();
+
     // 1. Initialize local SQLite database
     initDatabase().then(() => {
       // 2. Initialize network listener & trigger startup sync

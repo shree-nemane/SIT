@@ -1,5 +1,5 @@
 import React from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View, TouchableOpacity } from 'react-native';
 import { Avatar } from '../ui/Avatar';
 import { Badge } from '../ui/Badge';
 import { colors, spacing, typography } from '../../theme/theme';
@@ -12,6 +12,7 @@ export interface MemberItemProps {
   isOwner?: boolean;
   joinedAt?: string;
   isMe?: boolean;
+  onPress?: () => void;
 }
 
 export const MemberRow: React.FC<MemberItemProps> = ({
@@ -20,9 +21,15 @@ export const MemberRow: React.FC<MemberItemProps> = ({
   isOwner = false,
   joinedAt,
   isMe = false,
+  onPress,
 }) => {
   return (
-    <View style={styles.container}>
+    <TouchableOpacity
+      style={styles.container}
+      onPress={onPress}
+      activeOpacity={onPress ? 0.7 : 1}
+      disabled={!onPress}
+    >
       <Avatar uri={profileImageLocalPath} name={displayName} size="md" />
 
       <View style={styles.infoCol}>
@@ -35,7 +42,7 @@ export const MemberRow: React.FC<MemberItemProps> = ({
           <Text style={styles.joinedText}>Joined {formatRelativeTime(joinedAt)}</Text>
         )}
       </View>
-    </View>
+    </TouchableOpacity>
   );
 };
 

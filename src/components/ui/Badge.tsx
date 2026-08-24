@@ -27,12 +27,14 @@ export const Badge: React.FC<BadgeProps> = ({
 
     switch (variant) {
       case 'you':
-        base.backgroundColor = colors.primary;
+        base.backgroundColor = colors.surfaceElevated;
+        base.borderColor = colors.surfaceBorder;
+        base.borderWidth = 1;
         break;
       case 'owner':
-        base.backgroundColor = colors.primaryMuted;
-        base.borderColor = colors.primary;
-        base.borderWidth = 1;
+        base.backgroundColor = 'transparent';
+        base.paddingHorizontal = 0;
+        base.paddingVertical = 0;
         break;
       case 'group':
         base.backgroundColor = colors.surfaceElevated;
@@ -40,7 +42,7 @@ export const Badge: React.FC<BadgeProps> = ({
         base.borderWidth = 1;
         break;
       case 'pending':
-        base.backgroundColor = colors.primaryMuted;
+        base.backgroundColor = colors.surfaceElevated;
         break;
       case 'success':
         base.backgroundColor = colors.secondaryMuted;
@@ -57,18 +59,23 @@ export const Badge: React.FC<BadgeProps> = ({
   const getTextStyle = (): TextStyle => {
     let baseText: TextStyle = {
       fontSize: typography.fontSizes.xxs,
-      fontWeight: typography.weights.bold,
+      fontWeight: typography.weights.medium,
     };
 
     switch (variant) {
       case 'you':
-        baseText.color = colors.textInverse;
+        baseText.color = colors.textSecondary;
         break;
       case 'owner':
+        baseText.color = colors.textMuted;
+        baseText.fontSize = typography.fontSizes.xs;
+        break;
       case 'pending':
-        baseText.color = colors.primary;
+        baseText.color = colors.textSecondary;
         break;
       case 'group':
+        baseText.color = colors.textSecondary;
+        break;
       case 'success':
         baseText.color = colors.secondary;
         break;

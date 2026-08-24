@@ -8,10 +8,18 @@ import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.Canvas
+import android.graphics.Color
+import android.graphics.Paint
 import android.os.Build
+import android.text.Layout
+import android.text.StaticLayout
+import android.text.TextPaint
+import android.text.TextUtils
 import android.util.Log
 import android.view.View
 import android.widget.RemoteViews
+import androidx.core.content.res.ResourcesCompat
 import org.json.JSONObject
 import java.io.File
 import java.io.FileOutputStream
@@ -140,10 +148,67 @@ class StayInTouchWidgetProvider : AppWidgetProvider() {
                         e.printStackTrace()
                     }
 
-                    views.setTextViewText(R.id.widget_title, displayName)
-                    views.setTextViewText(R.id.widget_counter, counterText)
-                    views.setTextViewText(R.id.widget_presence_text, presenceText)
-                    views.setTextViewText(R.id.widget_updated_at, "$updatedAt • Tap to cycle")
+                    val density = context.resources.displayMetrics.density
+                    val maxCaptionWidthPx = ((widgetWidthDp - 28) * density).toInt().coerceAtLeast(100)
+                    val maxTitleWidthPx = ((widgetWidthDp - 80) * density).toInt().coerceAtLeast(60)
+
+                    // 1. Member Title Bitmap (Manrope Bold)
+                    val titleBitmap = renderCustomFontText(
+                        context, displayName, R.font.manrope_bold, 13f, Color.parseColor("#1C1917"), maxTitleWidthPx, 1, Layout.Alignment.ALIGN_NORMAL
+                    )
+                    if (titleBitmap != null) {
+                        views.setImageViewBitmap(R.id.widget_title_img, titleBitmap)
+                        views.setViewVisibility(R.id.widget_title_img, View.VISIBLE)
+                        views.setViewVisibility(R.id.widget_title, View.GONE)
+                    } else {
+                        views.setTextViewText(R.id.widget_title, displayName)
+                        views.setViewVisibility(R.id.widget_title, View.VISIBLE)
+                        views.setViewVisibility(R.id.widget_title_img, View.GONE)
+                    }
+
+                    // 1b. Counter Text Bitmap (Manrope SemiBold)
+                    val counterWidthPx = (45 * density).toInt()
+                    val counterBitmap = renderCustomFontText(
+                        context, counterText, R.font.manrope_semibold, 11f, Color.parseColor("#8C857B"), counterWidthPx, 1, Layout.Alignment.ALIGN_OPPOSITE
+                    )
+                    if (counterBitmap != null) {
+                        views.setImageViewBitmap(R.id.widget_counter_img, counterBitmap)
+                        views.setViewVisibility(R.id.widget_counter_img, View.VISIBLE)
+                        views.setViewVisibility(R.id.widget_counter, View.GONE)
+                    } else {
+                        views.setTextViewText(R.id.widget_counter, counterText)
+                        views.setViewVisibility(R.id.widget_counter, View.VISIBLE)
+                        views.setViewVisibility(R.id.widget_counter_img, View.GONE)
+                    }
+
+                    // 2. Presence Note Caption Bitmap (Caveat Medium - Handwritten)
+                    val captionBitmap = renderCustomFontText(
+                        context, presenceText, R.font.caveat_medium, 18f, Color.parseColor("#292524"), maxCaptionWidthPx, 2, Layout.Alignment.ALIGN_CENTER
+                    )
+                    if (captionBitmap != null) {
+                        views.setImageViewBitmap(R.id.widget_presence_img_text, captionBitmap)
+                        views.setViewVisibility(R.id.widget_presence_img_text, View.VISIBLE)
+                        views.setViewVisibility(R.id.widget_presence_text, View.GONE)
+                    } else {
+                        views.setTextViewText(R.id.widget_presence_text, presenceText)
+                        views.setViewVisibility(R.id.widget_presence_text, View.VISIBLE)
+                        views.setViewVisibility(R.id.widget_presence_img_text, View.GONE)
+                    }
+
+                    // 3. UpdatedAt Subtitle Bitmap (Manrope Regular)
+                    val fullUpdatedAtText = "$updatedAt • Tap to cycle"
+                    val updatedAtBitmap = renderCustomFontText(
+                        context, fullUpdatedAtText, R.font.manrope_regular, 10f, Color.parseColor("#8C857B"), maxCaptionWidthPx, 1, Layout.Alignment.ALIGN_CENTER
+                    )
+                    if (updatedAtBitmap != null) {
+                        views.setImageViewBitmap(R.id.widget_updated_at_img, updatedAtBitmap)
+                        views.setViewVisibility(R.id.widget_updated_at_img, View.VISIBLE)
+                        views.setViewVisibility(R.id.widget_updated_at, View.GONE)
+                    } else {
+                        views.setTextViewText(R.id.widget_updated_at, fullUpdatedAtText)
+                        views.setViewVisibility(R.id.widget_updated_at, View.VISIBLE)
+                        views.setViewVisibility(R.id.widget_updated_at_img, View.GONE)
+                    }
 
                     // Render avatar in widget (rounded circular crop) with max dimension 150px
                     if (!profileImagePath.isNullOrEmpty() && profileImagePath != "null") {
@@ -366,6 +431,51 @@ class StayInTouchWidgetProvider : AppWidgetProvider() {
                 }
             }
             return inSampleSize
+        }
+
+        private fun renderCustomFontText(
+            context: Context,
+            text: String,
+            fontResId: Int,
+            textSizeSp: Float,
+            textColor: Int,
+            maxWidthPx: Int,
+            maxLines: Int = 2,
+            alignment: Layout.Alignment = Layout.Alignment.ALIGN_CENTER
+        ): Bitmap? {
+            if (text.isEmpty() || maxWidthPx <= 0) return null
+            try {
+                val density = context.resources.displayMetrics.density
+                val paint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
+                    color = textColor
+                    textSize = textSizeSp * density
+                    try {
+                        typeface = ResourcesCompat.getFont(context, fontResId)
+                    } catch (e: Throwable) {
+                        // Fallback to default
+                    }
+                }
+
+                val layout = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                    StaticLayout.Builder.obtain(text, 0, text.length, paint, maxWidthPx)
+                        .setAlignment(alignment)
+                        .setMaxLines(maxLines)
+                        .setEllipsize(TextUtils.TruncateAt.END)
+                        .build()
+                } else {
+                    @Suppress("DEPRECATION")
+                    StaticLayout(text, paint, maxWidthPx, alignment, 1.0f, 0.0f, false)
+                }
+
+                val heightPx = layout.height.coerceAtLeast(1)
+                val bitmap = Bitmap.createBitmap(maxWidthPx, heightPx, Bitmap.Config.ARGB_8888)
+                val canvas = Canvas(bitmap)
+                layout.draw(canvas)
+                return bitmap
+            } catch (t: Throwable) {
+                t.printStackTrace()
+                return null
+            }
         }
 
         private fun cleanupObsoleteMedia(context: Context, activeHashes: Set<String>) {

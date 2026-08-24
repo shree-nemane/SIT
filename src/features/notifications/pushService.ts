@@ -2,29 +2,52 @@ import { Platform, PermissionsAndroid } from 'react-native';
 import messaging from '@react-native-firebase/messaging';
 import { api } from '../../data/api';
 import syncEngine from '../sync/syncEngine';
+import notificationService from './notificationService';
+import { SITNotificationPayload } from './notificationTypes';
+
+export type SITDataPayload = SITNotificationPayload;
 
 /**
- * Expected SIT FCM data payload shape
- */
-export interface SITDataPayload {
-  type?: string;
-  groupId?: string;
-  reason?: string;
-  [key: string]: any;
-}
-
-/**
- * Validate and format expected SIT FCM data payload (type, groupId, reason).
+ * Validate and format expected SIT FCM data payload.
  * Extracts clean properties without exposing sensitive message fields.
  */
 export const validateSITPayload = (data?: Record<string, any>): SITDataPayload | null => {
   if (!data || typeof data !== 'object') return null;
-  const { type, groupId, reason } = data;
+  const {
+    version,
+    type,
+    groupId,
+    presenceId,
+    presence_id,
+    reason,
+    actorName,
+    actor_name,
+    displayName,
+    display_name,
+    actorId,
+    memberId,
+    actor_id,
+    member_id,
+    description,
+    status,
+    caption,
+  } = data;
   if (!type) return null;
+
+  const resolvedActorName = actorName || actor_name || displayName || display_name;
+  const resolvedActorId = actorId || memberId || actor_id || member_id;
+  const resolvedDescription = description || status || caption;
+  const resolvedPresenceId = presenceId || presence_id;
+
   return {
+    version: version ? String(version) : '1',
     type: String(type),
-    groupId: groupId ? String(groupId) : undefined,
+    groupId: groupId ? String(groupId) : '',
+    presenceId: resolvedPresenceId ? String(resolvedPresenceId) : undefined,
     reason: reason ? String(reason) : undefined,
+    actorName: resolvedActorName ? String(resolvedActorName) : undefined,
+    actorId: resolvedActorId ? String(resolvedActorId) : undefined,
+    description: resolvedDescription ? String(resolvedDescription) : undefined,
   };
 };
 
@@ -78,6 +101,27 @@ class PushService {
       if (__DEV__) {
         console.log('[PushService] Permission request failed gracefully:', err?.message || err);
       }
+      return false;
+    }
+  }
+
+  /**
+   * Check OS system notification permission status non-blockingly without prompting user.
+   */
+  async checkOSNotificationPermission(): Promise<boolean> {
+    try {
+      if (Platform.OS === 'android' && Platform.Version >= 33) {
+        const hasPermission = await PermissionsAndroid.check(
+          PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS
+        );
+        if (!hasPermission) return false;
+      }
+      const authStatus = await messaging().hasPermission();
+      return (
+        authStatus === messaging.AuthorizationStatus.AUTHORIZED ||
+        authStatus === messaging.AuthorizationStatus.PROVISIONAL
+      );
+    } catch {
       return false;
     }
   }
@@ -141,6 +185,10 @@ class PushService {
       // 4. Ensure single token refresh & foreground message listeners
       this.setupTokenRefreshListener();
       this.setupForegroundMessageHandler();
+
+      // 5. Initialize Android Notification Channel & Tap Event Listeners
+      notificationService.initializeNotificationChannel();
+      notificationService.setupNotificationEventListeners();
 
       return result.success;
     } catch (err: any) {

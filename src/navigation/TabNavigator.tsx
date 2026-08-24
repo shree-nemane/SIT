@@ -1,12 +1,13 @@
 import React from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MainTabParamList } from './types';
 import { HomeScreen } from '../features/presence/HomeScreen';
 import { GroupScreen } from '../features/presence/GroupScreen';
 import { ProfileScreen } from '../features/presence/ProfileScreen';
-import { colors, typography, shadows, spacing } from '../theme/theme';
+import Text from '../components/ui/Text';
+import { colors, fonts, shadows, spacing } from '../theme/theme';
 
 const Tab = createBottomTabNavigator<MainTabParamList>();
 
@@ -54,8 +55,8 @@ const TabItem: React.FC<{ name: 'feed' | 'circle' | 'you'; label: string; focuse
   );
 };
 
-const renderFeedTabIcon = ({ focused }: { focused: boolean }) => (
-  <TabItem name="feed" label="Feed" focused={focused} />
+const renderTodayTabIcon = ({ focused }: { focused: boolean }) => (
+  <TabItem name="feed" label="Today" focused={focused} />
 );
 
 const renderCircleTabIcon = ({ focused }: { focused: boolean }) => (
@@ -96,17 +97,16 @@ export const TabNavigator = () => {
       }}
     >
       <Tab.Screen
-        name="Feed"
+        name="Today"
         component={HomeScreen}
         options={{
-          tabBarIcon: renderFeedTabIcon,
+          tabBarIcon: renderTodayTabIcon,
         }}
       />
       <Tab.Screen
         name="Group"
         component={GroupScreen}
         options={{
-          title: 'Your Circle',
           tabBarIcon: renderCircleTabIcon,
         }}
       />
@@ -114,7 +114,6 @@ export const TabNavigator = () => {
         name="Profile"
         component={ProfileScreen}
         options={{
-          title: 'You',
           tabBarIcon: renderYouTabIcon,
         }}
       />
@@ -178,13 +177,13 @@ const styles = StyleSheet.create({
   },
   tabLabel: {
     color: colors.textMuted,
-    fontSize: typography.fontSizes.xxs,
-    fontWeight: typography.weights.medium,
-    marginTop: 2,
+    fontFamily: fonts.manrope.medium,
+    fontSize: 10,
+    marginTop: -2,
   },
   tabLabelActive: {
     color: colors.primary,
-    fontWeight: typography.weights.bold,
+    fontFamily: fonts.manrope.bold,
   },
   activeDot: {
     width: 4,

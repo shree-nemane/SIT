@@ -3,6 +3,10 @@
 .DS_Store
 
 google-services.json
+GoogleService-Info.plist
+
+# Font source archives (fonts extracted to assets/fonts/ — commit those, not the zip)
+manrope.zip
 
 # Xcode
 #

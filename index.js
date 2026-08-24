@@ -7,6 +7,7 @@ import messaging from '@react-native-firebase/messaging';
 import App from './App';
 import { name as appName } from './app.json';
 import { validateSITPayload } from './src/features/notifications/pushService';
+import notificationService from './src/features/notifications/notificationService';
 import backgroundSyncTask from './src/features/sync/backgroundSyncTask';
 
 // Background messaging handler registered outside component rendering lifecycle
@@ -17,6 +18,7 @@ messaging().setBackgroundMessageHandler(async (remoteMessage) => {
   }
 
   if (payload) {
+    // 1. Trigger existing background sync trigger (WorkManager -> Headless JS -> syncEngine.syncAll() -> SQLite + Widget)
     try {
       if (NativeModules.WidgetBridge && typeof NativeModules.WidgetBridge.triggerBackgroundSync === 'function') {
         await NativeModules.WidgetBridge.triggerBackgroundSync();
@@ -27,6 +29,22 @@ messaging().setBackgroundMessageHandler(async (remoteMessage) => {
     } catch (err) {
       if (__DEV__) {
         console.log('[PushService] Failed to trigger WorkManager from background FCM message:', err);
+      }
+    }
+
+    // 2. Display local visible notification banner safely (failure isolated from background sync)
+    try {
+      await notificationService.showPresenceUpdateNotification({
+        presenceId: payload.presenceId,
+        actorName: payload.actorName,
+        actorId: payload.actorId,
+        groupId: payload.groupId,
+        reason: payload.reason,
+        description: payload.description,
+      });
+    } catch (notifErr) {
+      if (__DEV__) {
+        console.log('[PushService] Failed to display local background notification:', notifErr);
       }
     }
   }

@@ -61,6 +61,7 @@ export const InviteCodeCard: React.FC<InviteCodeCardProps> = ({
               variant="primary"
               size="sm"
               style={styles.flexOne}
+              disabled={isLoading}
             />
             <Button
               title="↻ New Code"
@@ -68,10 +69,24 @@ export const InviteCodeCard: React.FC<InviteCodeCardProps> = ({
               variant="secondary"
               size="sm"
               style={styles.flexOne}
+              disabled={isLoading}
             />
           </View>
         </View>
-      ) : null}
+      ) : (
+        <View style={styles.noCodeBox}>
+          <Text style={styles.noCodeText}>
+            No active invitation code. Create a 24-hour invite code to invite a friend to your circle.
+          </Text>
+          <Button
+            title="➕ Create Invite Code"
+            onPress={onGenerateNew}
+            variant="primary"
+            size="sm"
+            disabled={isLoading}
+          />
+        </View>
+      )}
     </Card>
   );
 };
@@ -141,6 +156,21 @@ const styles = StyleSheet.create({
   },
   flexOne: {
     flex: 1,
+  },
+  noCodeBox: {
+    backgroundColor: colors.surface,
+    borderColor: colors.surfaceBorder,
+    borderWidth: 1,
+    borderRadius: borderRadius.md,
+    padding: spacing.md,
+    alignItems: 'center',
+  },
+  noCodeText: {
+    color: colors.textSecondary,
+    fontSize: typography.fontSizes.xs,
+    textAlign: 'center',
+    marginBottom: spacing.md,
+    lineHeight: typography.lineHeights.sm,
   },
 });
 

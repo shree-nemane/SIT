@@ -7,7 +7,7 @@ import {
   ViewStyle,
   TextStyle,
 } from 'react-native';
-import { colors, spacing, shadows, typography } from '../../theme/theme';
+import { colors, spacing, shadows, fonts } from '../../theme/theme';
 
 export type ButtonVariant = 'primary' | 'secondary' | 'outline' | 'destructive' | 'ghost';
 export type ButtonSize = 'sm' | 'md' | 'lg';
@@ -99,16 +99,15 @@ export const Button: React.FC<ButtonProps> = ({
 
   const getTextStyle = (): TextStyle => {
     let baseText: TextStyle = {
-      fontWeight: typography.weights.semibold,
+      fontFamily: size === 'lg' ? fonts.manrope.bold : fonts.manrope.semiBold,
     };
 
     if (size === 'sm') {
-      baseText.fontSize = typography.fontSizes.xs;
+      baseText.fontSize = 12;
     } else if (size === 'lg') {
-      baseText.fontSize = typography.fontSizes.md;
-      baseText.fontWeight = typography.weights.bold;
+      baseText.fontSize = 16;
     } else {
-      baseText.fontSize = typography.fontSizes.sm;
+      baseText.fontSize = 14;
     }
 
     switch (variant) {

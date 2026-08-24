@@ -72,31 +72,59 @@
         android:paddingStart="4dp"
         android:paddingEnd="4dp">
 
-        <!-- HEADER ROW: Avatar + Member Name + Counter (Centered) -->
+        <!-- HEADER ROW: Avatar + Member Name (Left) & Counter (Right) -->
         <LinearLayout
-            android:layout_width="wrap_content"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="horizontal"
             android:gravity="center_vertical"
-            android:layout_gravity="center_horizontal"
-            android:layout_marginBottom="3dp">
+            android:layout_marginBottom="3dp"
+            android:paddingStart="4dp"
+            android:paddingEnd="4dp">
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="horizontal"
+                android:gravity="center_vertical">
+
+                <ImageView
+                    android:id="@+id/widget_avatar"
+                    android:layout_width="20dp"
+                    android:layout_height="20dp"
+                    android:layout_marginEnd="6dp"
+                    android:scaleType="centerCrop"
+                    android:visibility="gone" />
+
+                <ImageView
+                    android:id="@+id/widget_title_img"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:scaleType="fitCenter"
+                    android:visibility="gone" />
+
+                <TextView
+                    android:id="@+id/widget_title"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Stay in Touch"
+                    android:textColor="#1C1917"
+                    android:textSize="13sp"
+                    android:maxLines="1"
+                    android:singleLine="true"
+                    android:ellipsize="end"
+                    android:fontFamily="@font/manrope_bold"
+                    android:visibility="visible" />
+            </LinearLayout>
 
             <ImageView
-                android:id="@+id/widget_avatar"
-                android:layout_width="20dp"
-                android:layout_height="20dp"
-                android:layout_marginEnd="6dp"
-                android:scaleType="centerCrop"
-                android:visibility="gone" />
-
-            <TextView
-                android:id="@+id/widget_title"
+                android:id="@+id/widget_counter_img"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Stay in Touch"
-                android:textColor="#1C1917"
-                android:textSize="13sp"
-                android:textStyle="bold" />
+                android:scaleType="fitCenter"
+                android:layout_marginStart="6dp"
+                android:visibility="gone" />
 
             <TextView
                 android:id="@+id/widget_counter"
@@ -105,10 +133,24 @@
                 android:layout_marginStart="6dp"
                 android:text="1/1"
                 android:textColor="#8C857B"
-                android:textSize="11sp" />
+                android:textSize="11sp"
+                android:maxLines="1"
+                android:singleLine="true"
+                android:lines="1"
+                android:fontFamily="@font/manrope_semibold" />
         </LinearLayout>
 
-        <!-- PRESENCE CAPTION (CENTERED LIKE HANDWRITTEN POLAROID CAPTION) -->
+        <!-- PRESENCE CAPTION (HANDWRITTEN CAVEAT RENDERED BITMAP) -->
+        <ImageView
+            android:id="@+id/widget_presence_img_text"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center_horizontal"
+            android:scaleType="centerInside"
+            android:layout_marginTop="2dp"
+            android:layout_marginBottom="2dp"
+            android:visibility="gone" />
+
         <TextView
             android:id="@+id/widget_presence_text"
             android:layout_width="match_parent"
@@ -116,11 +158,22 @@
             android:gravity="center"
             android:text="No updates yet..."
             android:textColor="#292524"
-            android:textSize="12sp"
+            android:textSize="14sp"
             android:maxLines="2"
-            android:ellipsize="end" />
+            android:ellipsize="end"
+            android:fontFamily="@font/caveat_medium"
+            android:visibility="visible" />
 
-        <!-- TIMESTAMP PRINTED CAPTION (CENTERED) -->
+        <!-- TIMESTAMP PRINTED CAPTION (MANROPE RENDERED BITMAP) -->
+        <ImageView
+            android:id="@+id/widget_updated_at_img"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center_horizontal"
+            android:scaleType="fitCenter"
+            android:layout_marginTop="2dp"
+            android:visibility="gone" />
+
         <TextView
             android:id="@+id/widget_updated_at"
             android:layout_width="wrap_content"
@@ -130,7 +183,9 @@
             android:layout_marginTop="3dp"
             android:text="Tap to cycle friends"
             android:textColor="#8C857B"
-            android:textSize="10sp" />
+            android:textSize="10sp"
+            android:fontFamily="@font/manrope_regular"
+            android:visibility="visible" />
     </LinearLayout>
 
 </LinearLayout>

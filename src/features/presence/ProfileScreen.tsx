@@ -1,7 +1,6 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import {
   StyleSheet,
-  Text,
   View,
   Alert,
 } from 'react-native';
@@ -9,16 +8,17 @@ import { ScreenContainer } from '../../components/ui/ScreenContainer';
 import { Avatar } from '../../components/ui/Avatar';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
-import { WidgetGuideCard } from '../../components/widget/WidgetGuideCard';
-import { colors, spacing, typography, borderRadius } from '../../theme/theme';
+import { Card } from '../../components/ui/Card';
+import Text from '../../components/ui/Text';
+import { colors, spacing, borderRadius } from '../../theme/theme';
 import { useAuthStore } from '../auth/authStore';
 import MemberRepository from '../../data/repositories/MemberRepository';
 import imagePipeline, { ProcessedImageResult } from '../media/imagePipeline';
 import ImageEditorModal from '../media/ImageEditorModal';
 import syncEngine from '../sync/syncEngine';
 
-export const ProfileScreen: React.FC = () => {
-  const { member, userId, signOut, initializeAuth } = useAuthStore();
+export const ProfileScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
+  const { member, userId, initializeAuth } = useAuthStore();
   const activeUserId = member?.id || userId;
 
   const [editDisplayName, setEditDisplayName] = useState('');
@@ -52,8 +52,12 @@ export const ProfileScreen: React.FC = () => {
     }
   };
 
+  /**
+   * Idempotent Save Handler (Law 24):
+   * Disables button immediately on submit to prevent double-taps or repeat submissions.
+   */
   const handleSaveProfile = async () => {
-    if (!editDisplayName.trim() || !activeUserId) return;
+    if (!editDisplayName.trim() || !activeUserId || isSavingProfile) return;
     setIsSavingProfile(true);
 
     const profilePath = selectedProfileImage
@@ -69,9 +73,9 @@ export const ProfileScreen: React.FC = () => {
     if (ok) {
       await initializeAuth();
       syncEngine.syncAll();
-      Alert.alert('Profile Updated', 'Your profile changes have been saved locally.');
+      Alert.alert('Profile Saved', 'Your identity has been updated.');
     } else {
-      Alert.alert('Error', 'Failed to update profile locally.');
+      Alert.alert('Error', 'Failed to save profile changes.');
     }
     setIsSavingProfile(false);
   };
@@ -83,14 +87,14 @@ export const ProfileScreen: React.FC = () => {
   return (
     <ScreenContainer edges={['top']} scrollable contentContainerStyle={styles.scrollContent}>
       <View style={styles.padding}>
-        {/* CUSTOM RESPONSIVE PAGE DISPLAY HEADER */}
+        {/* EYEBROW PAGE HEADER */}
         <View style={styles.header}>
-          <Text style={styles.appTitle}>You</Text>
-          <Text style={styles.greetingText}>Your presence profile & account</Text>
+          <Text variant="micro" style={styles.eyebrowTitle}>YOU</Text>
+          <Text variant="h2" style={styles.pageTitle}>Identity</Text>
         </View>
 
-        {/* AVATAR HERO ZONE - NOT A CARD (HERO TINTED CONTAINER) */}
-        <View style={styles.avatarHeroZone}>
+        {/* IDENTITY CONTAINER (PURE IDENTITY FOCUS) */}
+        <Card variant="default" style={styles.identityCard}>
           <Avatar
             uri={activeAvatarPath}
             name={editDisplayName || member?.displayName}
@@ -130,18 +134,15 @@ export const ProfileScreen: React.FC = () => {
             disabled={!editDisplayName.trim() || isSavingProfile}
             style={styles.saveBtn}
           />
-        </View>
+        </Card>
 
-        {/* WIDGET INSTALLATION GUIDE CARD */}
-        <WidgetGuideCard />
-
-        {/* SIGN OUT ACTION - DIRECT BUTTON (CARD-REDUCED) */}
+        {/* SINGLE CLEAN LINK OUT TO SETTINGS SCREEN */}
         <Button
-          title="Sign Out of Account"
-          onPress={signOut}
-          variant="destructive"
+          title="⚙️ Settings & Preferences →"
+          onPress={() => navigation.navigate('Settings')}
+          variant="secondary"
           size="md"
-          style={styles.signOutBtn}
+          style={styles.settingsLinkBtn}
         />
       </View>
 
@@ -164,27 +165,22 @@ const styles = StyleSheet.create({
     paddingBottom: 90,
   },
   padding: {
-    // Rely on ScreenContainer default 16px side padding
+    padding: spacing.md,
   },
   header: {
-    marginTop: spacing.md,
-    marginBottom: spacing.lg,
+    marginTop: spacing.xs,
+    marginBottom: spacing.md,
   },
-  appTitle: {
-    color: colors.primary,
-    fontSize: typography.fontSizes.display,
-    fontWeight: typography.weights.heavy,
-    letterSpacing: -0.5,
+  eyebrowTitle: {
+    color: colors.textMuted,
+    letterSpacing: 1.2,
   },
-  greetingText: {
+  pageTitle: {
     color: colors.textPrimary,
-    fontSize: typography.fontSizes.md,
     marginTop: spacing.xxs,
   },
-  avatarHeroZone: {
+  identityCard: {
     alignItems: 'center',
-    backgroundColor: 'rgba(245, 158, 11, 0.04)',
-    borderRadius: borderRadius.lg,
     padding: spacing.xl,
     marginBottom: spacing.md,
   },
@@ -203,9 +199,9 @@ const styles = StyleSheet.create({
   saveBtn: {
     width: '100%',
   },
-  signOutBtn: {
+  settingsLinkBtn: {
     width: '100%',
-    marginTop: spacing.sm,
+    marginTop: spacing.xs,
   },
 });
 

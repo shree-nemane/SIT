@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { NavigationContainer } from '@react-navigation/native';
+import { NavigationContainer, createNavigationContainerRef } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { RootStackParamList } from './types';
 import { TabNavigator } from './TabNavigator';
@@ -9,10 +9,15 @@ import { JoinGroupScreen } from '../features/auth/JoinGroupScreen';
 import { SplashScreen } from '../components/SplashScreen';
 import { useAuthStore } from '../features/auth/authStore';
 import { colors } from '../theme/theme';
+import notificationNavigation from '../features/notifications/notificationNavigation';
 
 import realtimeSyncListener from '../features/sync/realtimeSyncListener';
 
+import { SettingsScreen } from '../features/settings/SettingsScreen';
+import { MemberDetailScreen } from '../features/presence/MemberDetailScreen';
+
 const Stack = createNativeStackNavigator<RootStackParamList>();
+export const navigationRef = createNavigationContainerRef<RootStackParamList>();
 
 export const RootNavigator = () => {
   const { authStatus, membershipStatus, isLoading, initializeAuth } =
@@ -33,12 +38,41 @@ export const RootNavigator = () => {
     };
   }, [authStatus, membershipStatus]);
 
+  // Restore pending navigation from AsyncStorage on cold start
+  useEffect(() => {
+    notificationNavigation.loadStoredDestination();
+  }, []);
+
+  // Handle pending notification tap navigation safely after auth resolution & navigator ready
+  useEffect(() => {
+    const isAuthResolved = authStatus === 'signed_in' && membershipStatus === 'member' && !isLoading;
+    if (isAuthResolved) {
+      const checkAndNavigate = () => {
+        if (navigationRef.isReady() && notificationNavigation.hasPendingDestination()) {
+          const pending = notificationNavigation.consumePendingDestination();
+          if (pending) {
+            const dest = pending.destination;
+            if (dest === 'Group' || dest === 'Profile') {
+              (navigationRef as any).navigate('MainApp', { screen: dest });
+            } else if (dest === 'CheckIn' || dest === 'Settings') {
+              (navigationRef as any).navigate(dest);
+            } else {
+              (navigationRef as any).navigate('MainApp', { screen: 'Today' });
+            }
+          }
+        }
+      };
+
+      checkAndNavigate();
+    }
+  }, [authStatus, membershipStatus, isLoading]);
+
   if (isLoading) {
     return <SplashScreen />;
   }
 
   return (
-    <NavigationContainer>
+    <NavigationContainer ref={navigationRef}>
       <Stack.Navigator
         screenOptions={{
           headerStyle: {
@@ -76,6 +110,16 @@ export const RootNavigator = () => {
               name="CheckIn"
               component={CheckInScreen}
               options={{ title: 'Check In', headerBackTitle: 'Back', headerShown: false }}
+            />
+            <Stack.Screen
+              name="Settings"
+              component={SettingsScreen}
+              options={{ title: 'Settings', headerShown: false }}
+            />
+            <Stack.Screen
+              name="MemberDetail"
+              component={MemberDetailScreen}
+              options={{ title: 'Member Detail', headerShown: false }}
             />
           </>
         )}

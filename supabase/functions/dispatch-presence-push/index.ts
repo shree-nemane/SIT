@@ -140,9 +140,11 @@ serve(async (req) => {
     }
 
     const body: WebhookPayload = await req.json();
-    const { table, type, record } = body;
+    const { table, type, record, old_record } = body;
 
-    if (!record) {
+    const activeRecord = type === 'DELETE' ? old_record : (record || old_record);
+
+    if (!activeRecord) {
       return new Response(
         JSON.stringify({ success: false, reason: 'empty_record' }),
         { status: 200, headers: corsHeaders }
@@ -153,24 +155,36 @@ serve(async (req) => {
 
     let actorUserId: string | null = null;
     let groupId: string | null = null;
-    let reason = 'PRESENCE_UPDATE';
+    let reason = type === 'DELETE' ? 'PRESENCE_DELETED' : 'PRESENCE_UPDATE';
+
+    let presenceId: string | null = null;
+    let actorName: string | null = null;
+    let presenceDescription: string | null = null;
 
     if (table === 'presences') {
-      actorUserId = record.member_id;
-      reason = 'MEMBER_CHECKIN';
+      actorUserId = activeRecord.member_id;
+      presenceId = activeRecord.id ? String(activeRecord.id) : null;
+      if (type !== 'DELETE') {
+        presenceDescription = activeRecord.description || null;
+        reason = 'MEMBER_CHECKIN';
+      } else {
+        reason = 'PRESENCE_DELETED';
+      }
 
       const { data: memberData } = await supabaseAdmin
         .from('members')
-        .select('group_id')
+        .select('group_id, display_name')
         .eq('id', actorUserId)
-        .single();
+        .maybeSingle();
 
       if (memberData) {
         groupId = memberData.group_id;
+        actorName = memberData.display_name;
       }
     } else if (table === 'members') {
-      actorUserId = record.id;
-      groupId = record.group_id;
+      actorUserId = activeRecord.id;
+      groupId = activeRecord.group_id;
+      actorName = activeRecord.display_name;
       reason = 'PROFILE_UPDATE';
     }
 
@@ -225,9 +239,23 @@ serve(async (req) => {
         message: {
           token: device.token,
           data: {
+            version: '1',
             type: 'PRESENCE_UPDATE',
             groupId: String(groupId),
             reason: String(reason),
+            actorId: String(actorUserId),
+            ...(presenceId ? { presenceId: String(presenceId) } : {}),
+            ...(actorName
+              ? {
+                  actorName: String(actorName),
+                  actor_name: String(actorName),
+                }
+              : {}),
+            ...(presenceDescription
+              ? {
+                  description: String(presenceDescription),
+                }
+              : {}),
           },
           android: {
             priority: 'HIGH',

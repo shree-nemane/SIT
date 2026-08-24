@@ -8,7 +8,6 @@ export interface PresenceImageProps {
 }
 
 export const PresenceImage: React.FC<PresenceImageProps> = ({ uri, style }) => {
-  const { width: windowWidth } = useWindowDimensions();
   const [aspectRatio, setAspectRatio] = useState<number>(16 / 9);
 
   useEffect(() => {
@@ -23,32 +22,12 @@ export const PresenceImage: React.FC<PresenceImageProps> = ({ uri, style }) => {
     }
   }, [uri]);
 
-  // Account for horizontal screen margins
-  const availableWidth = Math.max(260, windowWidth - spacing.md * 4);
-  const MAX_HEIGHT = 360;
-
-  const naturalHeight = availableWidth / (aspectRatio || 1.777);
-
-  let displayWidth = availableWidth;
-  let displayHeight = naturalHeight;
-
-  if (naturalHeight > MAX_HEIGHT) {
-    displayHeight = MAX_HEIGHT;
-    displayWidth = displayHeight * (aspectRatio || 1.777);
-  }
-
   return (
-    <View
-      style={[
-        styles.imageContainer,
-        { width: displayWidth, height: displayHeight },
-        style,
-      ]}
-    >
+    <View style={[styles.imageContainer, style]}>
       <Image
         source={{ uri }}
-        style={styles.image}
-        resizeMode="contain"
+        style={[styles.image, { aspectRatio: aspectRatio || 1.777 }]}
+        resizeMode="cover"
       />
     </View>
   );
@@ -56,16 +35,22 @@ export const PresenceImage: React.FC<PresenceImageProps> = ({ uri, style }) => {
 
 const styles = StyleSheet.create({
   imageContainer: {
-    alignSelf: 'center',
-    borderRadius: borderRadius.lg,
+    width: '100%',
+    maxWidth: '100%',
+    maxHeight: 360,
+    borderRadius: borderRadius.md,
     overflow: 'hidden',
     marginTop: spacing.sm,
     marginBottom: spacing.xs,
+    alignItems: 'center',
+    justifyContent: 'center',
+    alignSelf: 'center',
   },
   image: {
     width: '100%',
-    height: '100%',
-    borderRadius: borderRadius.lg,
+    maxHeight: 360,
+    borderRadius: borderRadius.md,
+    alignSelf: 'center',
   },
 });
 

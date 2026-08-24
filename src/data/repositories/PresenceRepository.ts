@@ -152,10 +152,80 @@ export const PresenceRepository = {
   },
 
   /**
+   * Fetch active presence for a single member with resolved local displayable image URIs.
+   * Efficient 1-row SQLite query for MemberDetailScreen.
+   */
+  async getActivePresenceForMember(memberId: string): Promise<{
+    presenceId: string;
+    memberId: string;
+    displayName: string;
+    profileImageId: string | null;
+    profileImageLocalPath: string | null;
+    description: string;
+    imageId: string | null;
+    presenceImageLocalPath: string | null;
+    updatedAt: string;
+    syncStatus: string;
+  } | null> {
+    const db = getDB();
+    try {
+      const res = await db.execute(
+        `SELECT 
+           p.id as presence_id, 
+           p.member_id, 
+           m.display_name, 
+           m.profile_image_id, 
+           pimg.storage_path as profile_storage_path,
+           p.description, 
+           p.image_id, 
+           img.storage_path as presence_storage_path,
+           p.updated_at, 
+           p.sync_status
+         FROM presences p
+         LEFT JOIN members m ON p.member_id = m.id
+         LEFT JOIN images img ON p.image_id = img.id
+         LEFT JOIN images pimg ON m.profile_image_id = pimg.id
+         WHERE p.member_id = ?
+         LIMIT 1;`,
+        [memberId]
+      );
+      if (!res.rows || res.rows.length === 0) return null;
+      const row: any = res.rows[0];
+      const profileLocalPath = await imageResolver.resolveImageUri(
+        row.profile_image_id,
+        row.profile_storage_path
+      );
+      const presenceLocalPath = await imageResolver.resolveImageUri(
+        row.image_id,
+        row.presence_storage_path
+      );
+      return {
+        presenceId: row.presence_id,
+        memberId: row.member_id,
+        displayName: row.display_name || 'Circle Member',
+        profileImageId: row.profile_image_id || null,
+        profileImageLocalPath: profileLocalPath,
+        description: row.description,
+        imageId: row.image_id || null,
+        presenceImageLocalPath: presenceLocalPath,
+        updatedAt: row.updated_at,
+        syncStatus: row.sync_status,
+      };
+    } catch (error) {
+      console.error('[PresenceRepository] Failed to get member active presence:', error);
+      return null;
+    }
+  },
+
+  /**
    * Atomic Delete Presence transaction:
    * Removes presence from local SQLite AND enqueues a DELETE operation item in sync_queue.
+   * Supports input as memberId string or structured { memberId, presenceId } object.
    */
-  async deletePresenceTransaction(memberId: string): Promise<boolean> {
+  async deletePresenceTransaction(
+    target: string | { memberId: string; presenceId?: string }
+  ): Promise<boolean> {
+    const memberId = typeof target === 'string' ? target : target.memberId;
     const db = getDB();
     try {
       const nowIso = new Date().toISOString();

@@ -5,13 +5,14 @@ import {
   TouchableOpacity,
   View,
   Image,
+  Alert,
 } from 'react-native';
 import { ScreenContainer } from '../../components/ui/ScreenContainer';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { Card } from '../../components/ui/Card';
 import { QuickStatusPill } from '../../components/presence/QuickStatusPill';
-import { colors, spacing, typography, borderRadius, shadows } from '../../theme/theme';
+import { colors, spacing, typography, borderRadius } from '../../theme/theme';
 import { usePresenceStore } from './presenceStore';
 import { useAuthStore } from '../auth/authStore';
 import PresenceRepository from '../../data/repositories/PresenceRepository';
@@ -36,85 +37,131 @@ export const CheckInScreen: React.FC<CheckInScreenProps> = ({ navigation }) => {
   const [editorVisible, setEditorVisible] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
 
+  // Auto-crop photo directly without forcing crop screen (Law 10 / Minimal Effort)
   const handlePickPhoto = async (useCamera: boolean = false) => {
+    if (isProcessing) return;
     setIsProcessing(true);
-    const result = await imagePipeline.pickImage(useCamera);
-    if (result) {
-      setRawPickedUri(result.localPath);
-      setEditorVisible(true);
-    }
-    setIsProcessing(false);
-  };
-
-  const handleSave = async () => {
-    if (!draftDescription.trim()) return;
-
-    setIsProcessing(true);
-    let activeUserId = member?.id || userId;
-    if (!activeUserId) {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session?.user?.id) {
-        activeUserId = session.user.id;
-      } else {
-        setIsProcessing(false);
-        return;
+    try {
+      const result = await imagePipeline.pickImage(useCamera);
+      if (result) {
+        setRawPickedUri(result.localPath);
+        // Auto crop by default to skip forced modal step
+        const autoCropped = await imagePipeline.cropAndScaleImage(
+          result.localPath,
+          0,
+          0,
+          1.0,
+          1.0,
+          undefined,
+          undefined,
+          result.width,
+          result.height
+        );
+        setSelectedImage(autoCropped || result);
       }
+    } catch (err: any) {
+      if (__DEV__) {
+        console.log('[CheckInScreen] Photo selection failed:', err);
+      }
+      Alert.alert('Photo Error', 'Could not select or process image. Please try again.');
+    } finally {
+      setIsProcessing(false);
     }
-
-    const presenceId = generateUUID();
-    const nowIso = new Date().toISOString();
-
-    const newPresence = {
-      id: presenceId,
-      memberId: activeUserId,
-      description: draftDescription.trim(),
-      imageId: selectedImage ? selectedImage.localPath : null,
-      updatedAt: nowIso,
-      syncStatus: 'pending' as const,
-    };
-
-    const syncPayload = JSON.stringify({
-      presenceId,
-      memberId: activeUserId,
-      description: draftDescription.trim(),
-      imageLocalPath: selectedImage ? selectedImage.localPath : null,
-      imageWidth: selectedImage ? selectedImage.width : undefined,
-      imageHeight: selectedImage ? selectedImage.height : undefined,
-      updatedAt: nowIso,
-    });
-
-    const syncOp = {
-      id: `sync_${Date.now()}`,
-      entityType: 'presence' as const,
-      entityId: presenceId,
-      operation: 'UPDATE' as const,
-      payload: syncPayload,
-      createdAt: nowIso,
-    };
-
-    const success = await PresenceRepository.saveCheckInTransaction(newPresence, syncOp);
-
-    if (success) {
-      setMyPresence(newPresence);
-      await widgetSnapshotService.updateAndNotifyWidget();
-      syncEngine.syncAll();
-      resetDraft();
-      navigation.goBack();
-    }
-    setIsProcessing(false);
   };
 
-  const handleSelectQuickStatus = (statusText: string) => {
-    if (!draftDescription.trim()) {
-      setDraftDescription(statusText);
-    } else {
-      setDraftDescription(`${draftDescription} ${statusText}`);
+  const executeCheckIn = async (textDescription: string, imageResult: ProcessedImageResult | null) => {
+    if (!textDescription.trim() || isProcessing) return;
+
+    setIsProcessing(true);
+    try {
+      let activeUserId = member?.id || userId;
+      if (!activeUserId) {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session?.user?.id) {
+          activeUserId = session.user.id;
+        } else {
+          Alert.alert('Authentication Error', 'Session lost. Please sign in again.');
+          return;
+        }
+      }
+
+      const presenceId = generateUUID();
+      const nowIso = new Date().toISOString();
+
+      const newPresence = {
+        id: presenceId,
+        memberId: activeUserId,
+        description: textDescription.trim(),
+        imageId: imageResult ? imageResult.localPath : null,
+        updatedAt: nowIso,
+        syncStatus: 'pending' as const,
+      };
+
+      const syncPayload = JSON.stringify({
+        presenceId,
+        memberId: activeUserId,
+        description: textDescription.trim(),
+        imageLocalPath: imageResult ? imageResult.localPath : null,
+        imageWidth: imageResult ? imageResult.width : undefined,
+        imageHeight: imageResult ? imageResult.height : undefined,
+        updatedAt: nowIso,
+      });
+
+      const syncOp = {
+        id: `sync_${Date.now()}`,
+        entityType: 'presence' as const,
+        entityId: presenceId,
+        operation: 'UPDATE' as const,
+        payload: syncPayload,
+        createdAt: nowIso,
+      };
+
+      const success = await PresenceRepository.saveCheckInTransaction(newPresence, syncOp);
+
+      if (success) {
+        setMyPresence(newPresence);
+        await widgetSnapshotService.updateAndNotifyWidget();
+        syncEngine.syncAll();
+        resetDraft();
+        navigation.navigate('MainApp', {
+          screen: 'Today',
+          params: {
+            showUndoToast: true,
+            undoPresenceId: presenceId,
+            undoMemberId: activeUserId,
+            undoStatusText: textDescription.trim(),
+          },
+        });
+      } else {
+        Alert.alert('Check In Error', 'Could not save check-in locally. Please try again.');
+      }
+    } catch (err: any) {
+      if (__DEV__) {
+        console.log('[CheckInScreen] Check-in transaction error:', err);
+      }
+      Alert.alert('Check In Failed', 'An unexpected error occurred while saving your check-in.');
+    } finally {
+      setIsProcessing(false);
     }
+  };
+
+  /**
+   * 1-Tap Quick Check-In (Minimal Effort)
+   * Tapping a status pill immediately submits the status in 1 tap with chip-level idempotency locking.
+   */
+  const handleSelectQuickStatus = (statusText: string) => {
+    if (isProcessing) return;
+    setDraftDescription(statusText);
+    executeCheckIn(statusText, selectedImage);
+  };
+
+  const handleManualSave = () => {
+    executeCheckIn(draftDescription, selectedImage);
   };
 
   return (
     <ScreenContainer edges={['top', 'bottom']} keyboardAvoiding scrollable style={styles.container}>
-      {/* SOPHISTICATED TOP NAVIGATION BAR */}
+      {/* TOP NAVIGATION BAR */}
       <View style={styles.topNavBar}>
         <TouchableOpacity
           onPress={() => navigation.goBack()}
@@ -130,47 +177,57 @@ export const CheckInScreen: React.FC<CheckInScreenProps> = ({ navigation }) => {
         <View style={styles.navBarSideRight} />
       </View>
 
-      {/* HERO COMPOSER CARD */}
-      <Card variant="elevated" style={styles.composerCard}>
+      {/* 1. QUICK STATUS PRESET SUGGESTIONS (FRONT & CENTER - 1 TAP PATH WITH IDEMPOTENCY LOCKING) */}
+      <Card variant="default" style={styles.quickStatusCard}>
+        <QuickStatusPill onSelectStatus={handleSelectQuickStatus} disabled={isProcessing} />
+      </Card>
+
+      {/* 2. OPTIONAL "SAY MORE" EXPANSION SECTION */}
+      <Card variant="default" style={styles.composerCard}>
+        <Text style={styles.sayMoreLabel}>SAY MORE (OPTIONAL)</Text>
+
         <Input
-          placeholder="What are you up to right now?"
+          placeholder="Add a note..."
           multiline
           maxLength={280}
           value={draftDescription}
           onChangeText={setDraftDescription}
-          autoFocus
           containerStyle={styles.inputWrapper}
           inputStyle={styles.inputStyle}
         />
 
-        {/* ATTACHED PHOTO PREVIEW CARD */}
+        {/* ATTACHED PHOTO PREVIEW */}
         {selectedImage && (
           <View style={styles.imagePreviewWrapper}>
             <Image
               source={{ uri: selectedImage.localPath }}
               style={styles.imagePreview}
-              resizeMode="contain"
+              resizeMode="cover"
             />
-            <TouchableOpacity
-              style={styles.removeImagePill}
-              onPress={() => setSelectedImage(null)}
-              activeOpacity={0.8}
-            >
-              <Text style={styles.removeImagePillText}>✕ Remove</Text>
-            </TouchableOpacity>
+            <View style={styles.imageActionsOverlay}>
+              <TouchableOpacity
+                style={styles.adjustFramingBtn}
+                onPress={() => setEditorVisible(true)}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.adjustFramingText}>📐 Adjust framing</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.removeImageBtn}
+                onPress={() => setSelectedImage(null)}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.removeImageText}>✕ Remove</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         )}
 
-        {/* QUICK STATUS PRESET SUGGESTIONS */}
-        <QuickStatusPill onSelectStatus={handleSelectQuickStatus} />
-      </Card>
-
-      {/* ATTACHMENT TOOLBAR CHIPS */}
-      <View style={styles.mediaToolbarSection}>
-        <Text style={styles.mediaToolbarLabel}>ATTACH MEDIA</Text>
+        {/* MEDIA ATTACH BUTTONS */}
         <View style={styles.mediaButtonsRow}>
           <Button
-            title="📷 Take Photo"
+            title="📷 Photo"
             onPress={() => handlePickPhoto(true)}
             variant="secondary"
             size="sm"
@@ -178,7 +235,7 @@ export const CheckInScreen: React.FC<CheckInScreenProps> = ({ navigation }) => {
             style={styles.flexHalf}
           />
           <Button
-            title="🖼️ From Gallery"
+            title="🖼️ Gallery"
             onPress={() => handlePickPhoto(false)}
             variant="secondary"
             size="sm"
@@ -186,13 +243,13 @@ export const CheckInScreen: React.FC<CheckInScreenProps> = ({ navigation }) => {
             style={styles.flexHalf}
           />
         </View>
-      </View>
+      </Card>
 
-      {/* PRIMARY SAVE ACTION */}
+      {/* PRIMARY UNIFIED UNAMBIGUOUS ACTION */}
       <View style={styles.actionSection}>
         <Button
-          title="Save Presence"
-          onPress={handleSave}
+          title="Check In"
+          onPress={handleManualSave}
           variant="primary"
           size="lg"
           isLoading={isProcessing}
@@ -217,13 +274,13 @@ export const CheckInScreen: React.FC<CheckInScreenProps> = ({ navigation }) => {
 
 const styles = StyleSheet.create({
   container: {
-    // Rely on ScreenContainer default 16px side padding
+    padding: spacing.md,
   },
   topNavBar: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingVertical: spacing.md,
+    paddingVertical: spacing.sm,
     marginBottom: spacing.xs,
   },
   navBarSideBtn: {
@@ -236,21 +293,32 @@ const styles = StyleSheet.create({
   },
   navBarTitle: {
     color: colors.textPrimary,
-    fontSize: typography.fontSizes.xl,
+    fontSize: typography.fontSizes.lg,
     fontWeight: typography.weights.bold,
   },
   navBarSideRight: {
     minWidth: 60,
   },
+  quickStatusCard: {
+    marginBottom: spacing.md,
+    padding: spacing.md,
+  },
   composerCard: {
     padding: spacing.md,
     marginBottom: spacing.md,
+  },
+  sayMoreLabel: {
+    color: colors.textMuted,
+    fontSize: typography.fontSizes.xxs,
+    fontWeight: typography.weights.bold,
+    letterSpacing: 1,
+    marginBottom: spacing.xs,
   },
   inputWrapper: {
     marginBottom: spacing.xs,
   },
   inputStyle: {
-    minHeight: 120,
+    minHeight: 80,
     fontSize: typography.fontSizes.md,
     textAlignVertical: 'top',
     lineHeight: typography.lineHeights.md,
@@ -258,42 +326,52 @@ const styles = StyleSheet.create({
   imagePreviewWrapper: {
     marginVertical: spacing.sm,
     position: 'relative',
-    borderRadius: borderRadius.lg,
+    borderRadius: borderRadius.md,
     overflow: 'hidden',
     backgroundColor: colors.background,
+    alignItems: 'center',
+    justifyContent: 'center',
+    alignSelf: 'center',
+    width: '100%',
   },
   imagePreview: {
     width: '100%',
-    height: 200,
-    borderRadius: borderRadius.lg,
+    height: 180,
+    borderRadius: borderRadius.md,
+    alignSelf: 'center',
   },
-  removeImagePill: {
+  imageActionsOverlay: {
     position: 'absolute',
-    top: 10,
+    bottom: 10,
+    left: 10,
     right: 10,
-    backgroundColor: 'rgba(18, 18, 18, 0.75)',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  adjustFramingBtn: {
+    backgroundColor: 'rgba(18, 18, 18, 0.85)',
     paddingHorizontal: spacing.sm,
     paddingVertical: spacing.xxs + 2,
     borderRadius: borderRadius.round,
   },
-  removeImagePillText: {
+  adjustFramingText: {
     color: colors.textPrimary,
     fontSize: typography.fontSizes.xs,
-    fontWeight: typography.weights.medium,
   },
-  mediaToolbarSection: {
-    marginBottom: spacing.md,
+  removeImageBtn: {
+    backgroundColor: 'rgba(18, 18, 18, 0.85)',
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xxs + 2,
+    borderRadius: borderRadius.round,
   },
-  mediaToolbarLabel: {
-    color: colors.textMuted,
-    fontSize: typography.fontSizes.xxs,
-    fontWeight: typography.weights.bold,
-    letterSpacing: 1,
-    marginBottom: spacing.xs,
+  removeImageText: {
+    color: colors.textPrimary,
+    fontSize: typography.fontSizes.xs,
   },
   mediaButtonsRow: {
     flexDirection: 'row',
     gap: spacing.sm,
+    marginTop: spacing.xs,
   },
   flexHalf: {
     flex: 1,
@@ -304,7 +382,6 @@ const styles = StyleSheet.create({
   },
   saveBtn: {
     width: '100%',
-    ...shadows.fab,
   },
 });
 

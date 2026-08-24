@@ -1,12 +1,13 @@
 import React from 'react';
-import { StyleSheet, Text, View, TouchableOpacity } from 'react-native';
+import { StyleSheet, View, TouchableOpacity } from 'react-native';
 import { Card } from '../ui/Card';
 import { Avatar } from '../ui/Avatar';
 import { Badge } from '../ui/Badge';
 import { PresenceImage } from './PresenceImage';
 import { HumanSyncBar } from './HumanSyncBar';
-import { colors, spacing, typography } from '../../theme/theme';
+import { colors, spacing } from '../../theme/theme';
 import { formatRelativeTime } from '../../utils/time';
+import Text from '../ui/Text';
 
 export interface PresenceCardItem {
   presenceId: string;
@@ -23,6 +24,7 @@ export interface PresenceCardProps {
   item: PresenceCardItem;
   isOwn?: boolean;
   onClearStatus?: () => void;
+  onPressCard?: () => void;
 }
 
 const isValidImageUri = (uri: string | null): boolean => {
@@ -40,30 +42,35 @@ export const PresenceCard: React.FC<PresenceCardProps> = ({
   item,
   isOwn = false,
   onClearStatus,
+  onPressCard,
 }) => {
   const hasImage = isValidImageUri(item.presenceImageLocalPath);
 
   return (
-    <Card variant={isOwn ? 'highlighted' : 'default'} style={styles.cardContainer}>
+    <Card
+      variant="default"
+      style={styles.cardContainer}
+      onPress={onPressCard}
+    >
       {/* HEADER: Avatar, Name, Badge, Time */}
       <View style={styles.headerRow}>
         <View style={styles.authorGroup}>
           <Avatar uri={item.profileImageLocalPath} name={item.displayName} size="md" />
           <View style={styles.nameRow}>
-            <Text style={styles.displayName}>{item.displayName}</Text>
+            <Text variant="subtitle" style={styles.displayName}>{item.displayName}</Text>
             {isOwn && <Badge label="YOU" variant="you" style={styles.youBadge} />}
           </View>
         </View>
 
-        <Text style={styles.timeText}>{formatRelativeTime(item.updatedAt)}</Text>
+        <Text variant="micro" style={styles.timeText}>{formatRelativeTime(item.updatedAt)}</Text>
       </View>
 
       {/* PHOTO-FIRST LAYOUT: Image is primary visual anchor when present */}
       {hasImage && <PresenceImage uri={item.presenceImageLocalPath!} />}
 
-      {/* DESCRIPTION TEXT */}
+      {/* DESCRIPTION TEXT: Handwritten note style (Caveat) */}
       {item.description ? (
-        <Text style={[styles.descriptionText, hasImage && styles.descriptionUnderImage]}>
+        <Text variant="note" style={[styles.descriptionText, hasImage && styles.descriptionUnderImage]}>
           {item.description}
         </Text>
       ) : null}
@@ -74,7 +81,7 @@ export const PresenceCard: React.FC<PresenceCardProps> = ({
 
         {isOwn && onClearStatus && (
           <TouchableOpacity onPress={onClearStatus} style={styles.clearBtn} activeOpacity={0.7}>
-            <Text style={styles.clearBtnText}>Clear Status</Text>
+            <Text variant="micro" style={styles.clearBtnText}>Clear Status</Text>
           </TouchableOpacity>
         )}
       </View>
@@ -104,28 +111,23 @@ const styles = StyleSheet.create({
   },
   displayName: {
     color: colors.textPrimary,
-    fontSize: typography.fontSizes.md,
-    fontWeight: typography.weights.bold,
   },
   youBadge: {
     marginLeft: spacing.xs,
   },
   timeText: {
     color: colors.textMuted,
-    fontSize: typography.fontSizes.xs,
   },
   descriptionText: {
     color: colors.textPrimary,
-    fontSize: typography.fontSizes.md,
-    lineHeight: typography.lineHeights.md,
     marginTop: spacing.sm,
     marginBottom: spacing.xxs,
-    textAlign: 'center'
+    textAlign: 'center',
   },
   descriptionUnderImage: {
     marginTop: spacing.sm,
     color: colors.textPrimary,
-    textAlign: 'center'
+    textAlign: 'center',
   },
   footerRow: {
     flexDirection: 'row',
@@ -140,8 +142,6 @@ const styles = StyleSheet.create({
   },
   clearBtnText: {
     color: colors.syncError,
-    fontSize: typography.fontSizes.xs,
-    fontWeight: typography.weights.semibold,
   },
 });
 

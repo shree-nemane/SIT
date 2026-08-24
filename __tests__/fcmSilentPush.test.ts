@@ -18,6 +18,17 @@ jest.mock('../src/data/api', () => ({
   },
 }));
 
+// Mock @notifee/react-native
+jest.mock('@notifee/react-native', () => ({
+  createChannel: jest.fn().mockImplementation(async (channel) => channel?.id || 'presence_updates_v2'),
+  displayNotification: jest.fn().mockResolvedValue('notif_123'),
+  onForegroundEvent: jest.fn().mockReturnValue(() => {}),
+  onBackgroundEvent: jest.fn(),
+  getInitialNotification: jest.fn().mockResolvedValue(null),
+  AndroidImportance: { DEFAULT: 3, HIGH: 4 },
+  EventType: { PRESS: 1 },
+}));
+
 describe('FCM Silent Push Mechanism Test Suite', () => {
   let mockMessaging: any;
 
@@ -54,9 +65,37 @@ describe('FCM Silent Push Mechanism Test Suite', () => {
       const parsed = validateSITPayload(rawData);
 
       expect(parsed).toEqual({
+        version: '1',
+        type: 'PRESENCE_UPDATE',
+        groupId: 'grp_100',
+        presenceId: undefined,
+        reason: 'MEMBER_CHECKIN',
+        actorName: undefined,
+        actorId: undefined,
+        description: undefined,
+      });
+    });
+
+    it('should extract valid SIT payload with type, groupId, reason, and actorName', () => {
+      const rawData = {
         type: 'PRESENCE_UPDATE',
         groupId: 'grp_100',
         reason: 'MEMBER_CHECKIN',
+        actorName: 'Alex',
+        extraSecretKey: 'should_not_leak',
+      };
+
+      const parsed = validateSITPayload(rawData);
+
+      expect(parsed).toEqual({
+        version: '1',
+        type: 'PRESENCE_UPDATE',
+        groupId: 'grp_100',
+        presenceId: undefined,
+        reason: 'MEMBER_CHECKIN',
+        actorName: 'Alex',
+        actorId: undefined,
+        description: undefined,
       });
     });
 
@@ -65,9 +104,14 @@ describe('FCM Silent Push Mechanism Test Suite', () => {
       const parsed = validateSITPayload(rawData);
 
       expect(parsed).toEqual({
+        version: '1',
         type: 'PRESENCE_UPDATE',
-        groupId: undefined,
+        groupId: '',
+        presenceId: undefined,
         reason: undefined,
+        actorName: undefined,
+        actorId: undefined,
+        description: undefined,
       });
     });
   });
@@ -134,7 +178,7 @@ describe('FCM Silent Push Mechanism Test Suite', () => {
       require('../index');
 
       const mockInstance = messaging();
-      const calls = mockInstance.setBackgroundMessageHandler.mock.calls;
+      const calls = (mockInstance.setBackgroundMessageHandler as jest.Mock).mock.calls;
       if (calls.length > 0) {
         backgroundHandler = calls[0][0];
       }

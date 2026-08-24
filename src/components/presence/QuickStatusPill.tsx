@@ -4,9 +4,10 @@ import { colors, spacing, borderRadius, typography, QUICK_STATUSES } from '../..
 
 export interface QuickStatusPillProps {
   onSelectStatus: (text: string) => void;
+  disabled?: boolean;
 }
 
-export const QuickStatusPill: React.FC<QuickStatusPillProps> = ({ onSelectStatus }) => {
+export const QuickStatusPill: React.FC<QuickStatusPillProps> = ({ onSelectStatus, disabled = false }) => {
   return (
     <View style={styles.container}>
       <Text style={styles.headerLabel}>QUICK STATUS</Text>
@@ -18,8 +19,9 @@ export const QuickStatusPill: React.FC<QuickStatusPillProps> = ({ onSelectStatus
         {QUICK_STATUSES.map((item) => (
           <TouchableOpacity
             key={item.label}
-            style={styles.pill}
+            style={[styles.pill, disabled && styles.pillDisabled]}
             onPress={() => onSelectStatus(`${item.label} ${item.emoji}`)}
+            disabled={disabled}
             activeOpacity={0.75}
           >
             <Text style={styles.emojiText}>{item.emoji}</Text>
@@ -55,6 +57,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 8,
     borderRadius: borderRadius.round,
+  },
+  pillDisabled: {
+    opacity: 0.5,
   },
   emojiText: {
     fontSize: typography.fontSizes.sm,

@@ -1,14 +1,14 @@
 import React, { useState } from 'react';
 import {
   StyleSheet,
-  Text,
   TextInput,
   View,
   TextInputProps,
   ViewStyle,
   TextStyle,
 } from 'react-native';
-import { colors, spacing, typography } from '../../theme/theme';
+import { colors, spacing, fonts } from '../../theme/theme';
+import Text from './Text';
 
 export interface InputProps extends TextInputProps {
   label?: string;
@@ -45,14 +45,17 @@ export const Input: React.FC<InputProps> = ({
       return { borderColor: colors.syncError, borderWidth: 1 };
     }
     if (isFocused) {
-      return { borderColor: colors.primary, borderWidth: 1.5 };
+      return { borderColor: colors.surfaceBorderLight, borderWidth: 1 };
     }
     return { borderColor: colors.surfaceBorder, borderWidth: 1 };
   };
 
+  const counterThreshold = maxLength !== undefined ? (maxLength > 30 ? maxLength - 30 : Math.floor(maxLength * 0.7)) : 0;
+  const showCounter = maxLength !== undefined && value.length >= counterThreshold;
+
   return (
     <View style={[styles.wrapper, containerStyle]}>
-      {label && <Text style={styles.label}>{label}</Text>}
+      {label && <Text variant="label" style={styles.label}>{label}</Text>}
 
       <View style={[styles.inputContainer, getInputBorderStyle()]}>
         <TextInput
@@ -68,12 +71,12 @@ export const Input: React.FC<InputProps> = ({
 
       <View style={styles.footerRow}>
         {error ? (
-          <Text style={styles.errorText}>{error}</Text>
+          <Text variant="micro" style={styles.errorText}>{error}</Text>
         ) : (
           <View style={styles.flexOne} />
         )}
-        {maxLength !== undefined && (
-          <Text style={styles.counterText}>
+        {showCounter && (
+          <Text variant="micro" style={styles.counterText}>
             {value.length} / {maxLength}
           </Text>
         )}
@@ -89,9 +92,6 @@ const styles = StyleSheet.create({
   },
   label: {
     color: colors.textSecondary,
-    fontSize: typography.fontSizes.xs,
-    fontWeight: typography.weights.semibold,
-    letterSpacing: 0.8,
     textTransform: 'uppercase',
     marginBottom: spacing.xs,
   },
@@ -103,7 +103,8 @@ const styles = StyleSheet.create({
   },
   input: {
     color: colors.textPrimary,
-    fontSize: typography.fontSizes.md,
+    fontFamily: fonts.manrope.regular,
+    fontSize: 16,
     padding: 0,
   },
   footerRow: {
@@ -114,11 +115,9 @@ const styles = StyleSheet.create({
   },
   errorText: {
     color: colors.syncError,
-    fontSize: typography.fontSizes.xs,
   },
   counterText: {
     color: colors.textMuted,
-    fontSize: typography.fontSizes.xs,
     marginLeft: 'auto',
   },
   flexOne: {
