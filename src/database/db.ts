@@ -6,6 +6,13 @@ let dbInstance: DB | null = null;
 export const getDB = (): DB => {
   if (!dbInstance) {
     dbInstance = open({ name: 'stayintouch.sqlite' });
+    for (const sql of CREATE_TABLES_SQL) {
+      try {
+        dbInstance.execute(sql);
+      } catch {
+        // Table already exists
+      }
+    }
   }
   return dbInstance;
 };

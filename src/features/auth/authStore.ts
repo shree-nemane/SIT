@@ -8,36 +8,57 @@ import MemberRepository from '../../data/repositories/MemberRepository';
 import syncEngine from '../sync/syncEngine';
 import pushService from '../notifications/pushService';
 
-const parseDeepLinkParams = (url: string): Record<string, string> => {
-  const params: Record<string, string> = {};
-  if (!url) return params;
+export const parseAndValidateAuthUrl = (url: string | null | undefined): Record<string, string> | null => {
+  if (!url || typeof url !== 'string') return null;
 
-  const hashIndex = url.indexOf('#');
-  const queryIndex = url.indexOf('?');
+  try {
+    const parsed = new URL(url);
 
-  let paramString = '';
-  if (hashIndex !== -1) {
-    paramString = url.substring(hashIndex + 1);
-  } else if (queryIndex !== -1) {
-    paramString = url.substring(queryIndex + 1);
-  }
+    // 1. Strict Protocol Validation
+    if (parsed.protocol !== 'sit:') return null;
 
-  if (paramString) {
-    const pairs = paramString.split('&');
-    for (const pair of pairs) {
-      const eqIndex = pair.indexOf('=');
-      if (eqIndex === -1) {
-        if (pair) params[decodeURIComponent(pair)] = '';
-        continue;
+    // 2. Strict Host Validation
+    if (parsed.hostname !== 'auth') return null;
+
+    // 3. Strict Path Validation (/callback or /callback/)
+    const normPath = parsed.pathname.replace(/\/+$/, '');
+    if (normPath !== '/callback') return null;
+
+    const params: Record<string, string> = {};
+
+    const safelistAssign = (key: string, value: string) => {
+      if (
+        key &&
+        !key.includes('__proto__') &&
+        !key.includes('constructor') &&
+        !key.includes('prototype')
+      ) {
+        params[key] = value;
       }
-      const key = pair.slice(0, eqIndex);
-      const value = pair.slice(eqIndex + 1);
-      if (key) {
-        params[decodeURIComponent(key)] = decodeURIComponent(value);
-      }
+    };
+
+    // 4. Extract Query Parameters (?code=...)
+    if (parsed.search) {
+      const searchParams = new URLSearchParams(parsed.search);
+      searchParams.forEach((value, key) => safelistAssign(key, value));
     }
+
+    // 5. Extract Hash Fragment Parameters (#access_token=... or #code=...)
+    if (parsed.hash) {
+      const hashStr = parsed.hash.replace(/^#/, '');
+      const hashParams = new URLSearchParams(hashStr);
+      hashParams.forEach((value, key) => safelistAssign(key, value));
+    }
+
+    // Require code parameter OR access_token + refresh_token
+    if (!params.code && (!params.access_token || !params.refresh_token)) {
+      return null;
+    }
+
+    return params;
+  } catch {
+    return null;
   }
-  return params;
 };
 
 interface AuthStore {
@@ -116,6 +137,7 @@ const handleSessionUpdate = async (
       groupId: localMember.groupId,
       displayName: localMember.displayName,
       profileImageId: localMember.profileImageId,
+      profileImageLocalPath: localMember.profileImageLocalPath,
       joinedAt: new Date().toISOString(),
     };
 
@@ -208,9 +230,13 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
     set({ isLoading: true, error: null });
 
     const handleAuthUrl = async (url: string | null) => {
-      if (!url || !url.includes('sit://')) return;
+      if (__DEV__) {
+        console.log('[AuthStore] Received auth callback URL:', url);
+      }
+      const params = parseAndValidateAuthUrl(url);
+      if (!params) return;
+
       try {
-        const params = parseDeepLinkParams(url);
         if (params.code) {
           await supabase.auth.exchangeCodeForSession(params.code);
         } else if (params.access_token && params.refresh_token) {
@@ -220,6 +246,7 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
           });
         }
       } catch (e: any) {
+        console.error('[AuthStore] Auth callback processing failed:', e);
         set({ error: e.message || 'Failed to process auth callback' });
       }
     };

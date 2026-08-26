@@ -10,7 +10,6 @@ import { ScreenContainer } from '../../components/ui/ScreenContainer';
 import { PresenceCard } from '../../components/presence/PresenceCard';
 import { EmptyState } from '../../components/ui/EmptyState';
 import { ErrorState } from '../../components/ui/ErrorState';
-import { Badge } from '../../components/ui/Badge';
 import { ConfirmModal } from '../../components/ui/ConfirmModal';
 import { Button } from '../../components/ui/Button';
 import Text from '../../components/ui/Text';
@@ -94,10 +93,10 @@ export const HomeScreen: React.FC<{ route: any; navigation: any }> = ({ route, n
     setIsRefreshing(true);
     setSyncError(null);
     try {
-      const result = await syncEngine.syncAll();
+      await syncEngine.syncAll();
       setLastSyncTime(new Date().toISOString());
       setIsOffline(false);
-    } catch (e: any) {
+    } catch {
       setIsOffline(true);
       setSyncError('Could not sync latest updates from circle.');
     }

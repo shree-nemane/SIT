@@ -60,54 +60,88 @@ DECLARE
     v_device_id UUID;
     v_clean_token TEXT;
     v_clean_platform TEXT;
+    v_existing RECORD;
 BEGIN
+    -- 1. Authenticate caller
     v_user_id := auth.uid();
     IF v_user_id IS NULL THEN
         RETURN jsonb_build_object('success', false, 'error', 'Authentication required');
     END IF;
 
+    -- 2. Normalize token
     v_clean_token := trim(COALESCE(p_token, ''));
     IF v_clean_token = '' THEN
         RETURN jsonb_build_object('success', false, 'error', 'Token cannot be empty');
     END IF;
 
+    -- 3. Validate platform enum
     v_clean_platform := lower(trim(COALESCE(p_platform, 'android')));
+    IF v_clean_platform NOT IN ('android', 'ios', 'web') THEN
+        RETURN jsonb_build_object(
+            'success', false,
+            'error', 'Invalid platform specified. Allowed platforms: android, ios, web'
+        );
+    END IF;
 
-    -- Upsert token cleanly. Handles reinstall / user reassignment / token refresh deterministically.
-    INSERT INTO public.push_devices (
-        user_id,
-        token,
-        platform,
-        provider,
-        created_at,
-        updated_at,
-        last_seen_at,
-        is_active
-    ) VALUES (
-        v_user_id,
-        v_clean_token,
-        v_clean_platform,
-        'fcm',
-        NOW(),
-        NOW(),
-        NOW(),
-        TRUE
-    )
-    ON CONFLICT (token) DO UPDATE SET
-        user_id = EXCLUDED.user_id,
-        platform = EXCLUDED.platform,
-        provider = 'fcm',
-        updated_at = NOW(),
-        last_seen_at = NOW(),
-        is_active = TRUE
-    RETURNING id INTO v_device_id;
+    -- 4. Acquire token-specific transaction lock to serialize concurrent calls
+    PERFORM pg_advisory_xact_lock(hashtext(v_clean_token));
 
+    -- 5. Lookup token ownership
+    SELECT id, user_id, is_active INTO v_existing
+    FROM public.push_devices
+    WHERE token = v_clean_token;
+
+    IF FOUND THEN
+        -- Different user + active → DENY token hijacking
+        IF v_existing.user_id <> v_user_id AND v_existing.is_active = TRUE THEN
+            RETURN jsonb_build_object(
+                'success', false,
+                'error', 'Push device token is currently active under another user session'
+            );
+        END IF;
+
+        -- Same user → refresh OR Different user + inactive → transfer
+        UPDATE public.push_devices
+        SET user_id = v_user_id,
+            platform = v_clean_platform,
+            provider = 'fcm',
+            updated_at = NOW(),
+            last_seen_at = NOW(),
+            is_active = TRUE
+        WHERE token = v_clean_token
+        RETURNING id INTO v_device_id;
+    ELSE
+        -- Token doesn't exist → create
+        INSERT INTO public.push_devices (
+            user_id,
+            token,
+            platform,
+            provider,
+            created_at,
+            updated_at,
+            last_seen_at,
+            is_active
+        ) VALUES (
+            v_user_id,
+            v_clean_token,
+            v_clean_platform,
+            'fcm',
+            NOW(),
+            NOW(),
+            NOW(),
+            TRUE
+        )
+        RETURNING id INTO v_device_id;
+    END IF;
+
+    -- 6. Return structured result
     RETURN jsonb_build_object(
         'success', true,
         'device_id', v_device_id
     );
 EXCEPTION WHEN OTHERS THEN
-    RETURN jsonb_build_object('success', false, 'error', SQLERRM);
+    -- Do not expose raw SQLERRM to clients
+    RETURN jsonb_build_object('success', false, 'error', 'Failed to register push device token');
 END;
 $$;
 
@@ -134,6 +168,9 @@ BEGIN
         RETURN jsonb_build_object('success', true);
     END IF;
 
+    -- Acquire token-specific advisory transaction lock
+    PERFORM pg_advisory_xact_lock(hashtext(v_clean_token));
+
     UPDATE public.push_devices
     SET is_active = FALSE,
         updated_at = NOW()
@@ -142,7 +179,8 @@ BEGIN
 
     RETURN jsonb_build_object('success', true);
 EXCEPTION WHEN OTHERS THEN
-    RETURN jsonb_build_object('success', false, 'error', SQLERRM);
+    -- Do not expose raw SQLERRM to clients
+    RETURN jsonb_build_object('success', false, 'error', 'Failed to deactivate push device token');
 END;
 $$;
 

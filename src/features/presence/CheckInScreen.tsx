@@ -45,19 +45,8 @@ export const CheckInScreen: React.FC<CheckInScreenProps> = ({ navigation }) => {
       const result = await imagePipeline.pickImage(useCamera);
       if (result) {
         setRawPickedUri(result.localPath);
-        // Auto crop by default to skip forced modal step
-        const autoCropped = await imagePipeline.cropAndScaleImage(
-          result.localPath,
-          0,
-          0,
-          1.0,
-          1.0,
-          undefined,
-          undefined,
-          result.width,
-          result.height
-        );
-        setSelectedImage(autoCropped || result);
+        // Added as-is without any modification or auto-cropping
+        setSelectedImage(result);
       }
     } catch (err: any) {
       if (__DEV__) {
@@ -205,6 +194,7 @@ export const CheckInScreen: React.FC<CheckInScreenProps> = ({ navigation }) => {
               resizeMode="cover"
             />
             <View style={styles.imageActionsOverlay}>
+              {/* COMMENTED OUT FOR NOW - ADJUST FRAMING FEATURE
               <TouchableOpacity
                 style={styles.adjustFramingBtn}
                 onPress={() => setEditorVisible(true)}
@@ -212,6 +202,7 @@ export const CheckInScreen: React.FC<CheckInScreenProps> = ({ navigation }) => {
               >
                 <Text style={styles.adjustFramingText}>📐 Adjust framing</Text>
               </TouchableOpacity>
+              */}
 
               <TouchableOpacity
                 style={styles.removeImageBtn}

@@ -8,11 +8,11 @@ import {
   Image,
   PanResponder,
   Animated,
-  ActivityIndicator,
   ScrollView,
   useWindowDimensions,
 } from 'react-native';
-import { colors, spacing, typography, borderRadius } from '../../theme/theme';
+import { colors, spacing, typography, borderRadius, fonts } from '../../theme/theme';
+import { Button } from '../../components/ui/Button';
 import imagePipeline, { ProcessedImageResult } from './imagePipeline';
 
 export interface ImageEditorModalProps {
@@ -33,7 +33,6 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
   onApply,
 }) => {
   const { width: windowWidth } = useWindowDimensions();
-  const canvasSize = Math.min(240, windowWidth - spacing.xl * 2);
 
   const [scale, setScale] = useState(1.0);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -43,19 +42,10 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
   });
 
   const pan = useRef(new Animated.ValueXY({ x: 0, y: 0 })).current;
-  const currentOffset = useRef({ x: 0, y: 0 });
-
-  useEffect(() => {
-    const listener = pan.addListener((value) => {
-      currentOffset.current = value;
-    });
-    return () => pan.removeListener(listener);
-  }, [pan]);
-
   useEffect(() => {
     if (visible && sourceUri) {
       pan.setValue({ x: 0, y: 0 });
-      currentOffset.current = { x: 0, y: 0 };
+      pan.setOffset({ x: 0, y: 0 });
       setScale(1.0);
       setIsProcessing(false);
 
@@ -76,13 +66,11 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
   const panResponder = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => true,
+      onStartShouldSetPanResponderCapture: () => true,
       onMoveShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponderCapture: () => true,
       onPanResponderGrant: () => {
-        pan.setOffset({
-          x: currentOffset.current.x,
-          y: currentOffset.current.y,
-        });
-        pan.setValue({ x: 0, y: 0 });
+        pan.extractOffset();
       },
       onPanResponderMove: Animated.event([null, { dx: pan.x, dy: pan.y }], {
         useNativeDriver: false,
@@ -90,12 +78,13 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
       onPanResponderRelease: () => {
         pan.flattenOffset();
       },
+      onPanResponderTerminationRequest: () => false,
     })
   ).current;
 
   const handleReset = () => {
     pan.setValue({ x: 0, y: 0 });
-    currentOffset.current = { x: 0, y: 0 };
+    pan.setOffset({ x: 0, y: 0 });
     setScale(1.0);
   };
 
@@ -104,63 +93,38 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
     setIsProcessing(true);
 
     try {
-      const isProfile = mode === 'PROFILE';
       const sourceWidth = imgDimensions.width || 1080;
       const sourceHeight = imgDimensions.height || 1080;
+
+      // Extract exact accumulated drag offset in pixels
+      const totalX = ((pan.x as any)._value || 0) + ((pan.x as any)._offset || 0);
+      const totalY = ((pan.y as any)._value || 0) + ((pan.y as any)._offset || 0);
+
       let cropX = 0;
       let cropY = 0;
       let cropWidth = 1.0;
       let cropHeight = 1.0;
 
-      if (isProfile) {
-        let baseNormW = 1.0;
-        let baseNormH = 1.0;
-        let baseNormX = 0.0;
-        let baseNormY = 0.0;
+      if (scale > 1.01 || Math.abs(totalX) > 1 || Math.abs(totalY) > 1) {
+        cropWidth = Math.max(0.05, Math.min(1.0, 1.0 / scale));
+        cropHeight = Math.max(0.05, Math.min(1.0, 1.0 / scale));
 
-        const sourceAspect = sourceWidth / sourceHeight;
-        if (sourceAspect >= 1.0) {
-          baseNormW = 1.0 / sourceAspect;
-          baseNormH = 1.0;
-          baseNormX = (1.0 - baseNormW) / 2.0;
-          baseNormY = 0.0;
-        } else {
-          baseNormW = 1.0;
-          baseNormH = sourceAspect;
-          baseNormX = 0.0;
-          baseNormY = (1.0 - baseNormH) / 2.0;
-        }
-
-        cropWidth = Math.max(0.05, Math.min(baseNormW, baseNormW / scale));
-        cropHeight = Math.max(0.05, Math.min(baseNormH, baseNormH / scale));
-
-        const normOffsetX = currentOffset.current.x / (canvasSize * scale);
-        const normOffsetY = currentOffset.current.y / (canvasSize * scale);
-
-        cropX = Math.max(0, Math.min(1.0 - cropWidth, baseNormX + (baseNormW - cropWidth) / 2.0 - normOffsetX * baseNormW));
-        cropY = Math.max(0, Math.min(1.0 - cropHeight, baseNormY + (baseNormH - cropHeight) / 2.0 - normOffsetY * baseNormH));
-      } else if (scale > 1.01 || currentOffset.current.x !== 0 || currentOffset.current.y !== 0) {
-        cropWidth = Math.max(0.1, Math.min(1.0, 1.0 / scale));
-        cropHeight = Math.max(0.1, Math.min(1.0, 1.0 / scale));
-
-        const normOffsetX = currentOffset.current.x / (canvasSize * scale);
-        const normOffsetY = currentOffset.current.y / (canvasSize * scale);
+        const normOffsetX = totalX / (cropBoxWidth * scale);
+        const normOffsetY = totalY / (cropBoxHeight * scale);
 
         cropX = Math.max(0, Math.min(1.0 - cropWidth, (1.0 - cropWidth) / 2.0 - normOffsetX));
         cropY = Math.max(0, Math.min(1.0 - cropHeight, (1.0 - cropHeight) / 2.0 - normOffsetY));
       }
 
-      const targetW = isProfile ? 512 : undefined;
-      const targetH = isProfile ? 512 : undefined;
-
+      // Preserve full original aspect ratio without square pre-cropping
       const result = await imagePipeline.cropAndScaleImage(
         sourceUri,
         cropX,
         cropY,
         cropWidth,
         cropHeight,
-        targetW,
-        targetH,
+        undefined,
+        undefined,
         sourceWidth,
         sourceHeight
       );
@@ -187,46 +151,52 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
   if (!visible || !sourceUri) return null;
 
   const isProfile = mode === 'PROFILE';
-  const imageAspectRatio = imgDimensions.width / (imgDimensions.height || 1);
+  const imageAspectRatio = (imgDimensions.width && imgDimensions.height)
+    ? imgDimensions.width / imgDimensions.height
+    : 1.0;
 
-  const CROP_CANVAS_WIDTH = Math.min(290, windowWidth - spacing.md * 2);
-  const MAX_CROP_CANVAS_HEIGHT = 360;
+  const CROP_CANVAS_WIDTH = Math.min(340, windowWidth - spacing.xs * 2);
+  const MAX_CROP_CANVAS_HEIGHT = 440;
 
   let cropBoxWidth = CROP_CANVAS_WIDTH;
   let cropBoxHeight = CROP_CANVAS_WIDTH;
-  if (!isProfile) {
-    const calcH = CROP_CANVAS_WIDTH / (imageAspectRatio || 1.777);
-    if (calcH <= MAX_CROP_CANVAS_HEIGHT) {
+
+  const calcH = CROP_CANVAS_WIDTH / (imageAspectRatio || 1.0);
+  if (calcH <= MAX_CROP_CANVAS_HEIGHT) {
+    cropBoxWidth = CROP_CANVAS_WIDTH;
+    cropBoxHeight = calcH;
+  } else {
+    cropBoxHeight = MAX_CROP_CANVAS_HEIGHT;
+    cropBoxWidth = cropBoxHeight * (imageAspectRatio || 1.0);
+    if (cropBoxWidth > CROP_CANVAS_WIDTH) {
       cropBoxWidth = CROP_CANVAS_WIDTH;
-      cropBoxHeight = calcH;
-    } else {
-      cropBoxHeight = MAX_CROP_CANVAS_HEIGHT;
-      cropBoxWidth = cropBoxHeight * (imageAspectRatio || 1.777);
-      if (cropBoxWidth > CROP_CANVAS_WIDTH) {
-        cropBoxWidth = CROP_CANVAS_WIDTH;
-        cropBoxHeight = cropBoxWidth / (imageAspectRatio || 1.777);
-      }
+      cropBoxHeight = cropBoxWidth / (imageAspectRatio || 1.0);
     }
   }
+
+  const cutoutCircleDiameter = Math.min(cropBoxWidth, cropBoxHeight);
 
   return (
     <Modal visible={visible} animationType="slide" transparent={false}>
       <View style={styles.container}>
         {/* HEADER */}
         <View style={styles.header}>
-          <TouchableOpacity onPress={onClose} disabled={isProcessing}>
+          <TouchableOpacity onPress={onClose} disabled={isProcessing} activeOpacity={0.7} style={styles.cancelTouch}>
             <Text style={styles.cancelText}>Cancel</Text>
           </TouchableOpacity>
+
           <Text style={styles.headerTitle}>
-            {isProfile ? 'Frame Profile Picture' : 'Frame Presence Photo'}
+            {isProfile ? 'Profile Picture' : 'Presence Photo'}
           </Text>
-          <TouchableOpacity onPress={handleApply} disabled={isProcessing}>
-            {isProcessing ? (
-              <ActivityIndicator color={colors.primary} size="small" />
-            ) : (
-              <Text style={styles.applyText}>Use Photo</Text>
-            )}
-          </TouchableOpacity>
+
+          <Button
+            title="Use Photo"
+            onPress={handleApply}
+            variant="primary"
+            size="sm"
+            isLoading={isProcessing}
+            disabled={isProcessing}
+          />
         </View>
 
         <ScrollView
@@ -239,8 +209,8 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
           <View style={styles.workspace}>
             <Text style={styles.instructionText}>
               {isProfile
-                ? 'Drag and zoom inside circle to frame profile avatar'
-                : 'Pinch/Zoom or Drag to adjust optional status framing'}
+                ? 'Drag & pinch inside circle to frame profile avatar'
+                : 'Pinch & drag to adjust status photo framing'}
             </Text>
 
             <View
@@ -248,7 +218,6 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
                 styles.cropContainer,
                 styles.cropBoxSelfCenter,
                 { width: cropBoxWidth, height: cropBoxHeight },
-                isProfile && styles.roundedCropContainer,
               ]}
             >
               <View style={styles.cropTouchArea} {...panResponder.panHandlers}>
@@ -267,33 +236,74 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
                   <Image
                     source={{ uri: sourceUri }}
                     style={styles.sourceImage}
-                    resizeMode={isProfile || scale > 1.01 ? 'cover' : 'contain'}
+                    resizeMode="contain"
                   />
                 </Animated.View>
               </View>
 
-              {/* OVERLAY GUIDE GRID */}
-              <View style={styles.overlayFrame} pointerEvents="none" />
+              {/* OVERLAY GUIDE GRID (PRESENCE MODE) */}
+              {!isProfile && <View style={styles.overlayFrame} pointerEvents="none" />}
+
+              {/* WHATSAPP-STYLE LOW OPACITY CIRCLE CUTOUT OVERLAY (PROFILE MODE ONLY) */}
+              {isProfile && (() => {
+                const maskMargin = 400;
+                const outerSize = cutoutCircleDiameter + maskMargin * 2;
+                const outerRadius = outerSize / 2;
+
+                return (
+                  <View style={styles.whatsappMaskContainer} pointerEvents="none">
+                    <View
+                      style={[
+                        styles.whatsappMaskCircle,
+                        {
+                          width: outerSize,
+                          height: outerSize,
+                          borderRadius: outerRadius,
+                          borderWidth: maskMargin,
+                        },
+                      ]}
+                    />
+                    <View
+                      style={[
+                        styles.whatsappMaskRing,
+                        {
+                          width: cutoutCircleDiameter,
+                          height: cutoutCircleDiameter,
+                          borderRadius: cutoutCircleDiameter / 2,
+                        },
+                      ]}
+                    />
+                  </View>
+                );
+              })()}
             </View>
 
-            {/* ZOOM CONTROLS */}
+            {/* ZOOM & RESET CONTROL BAR */}
             <View style={styles.controlsRow}>
-              <TouchableOpacity
-                style={styles.zoomBtn}
+              <Button
+                title="−"
                 onPress={() => setScale((s) => Math.max(1.0, s - 0.2))}
-              >
-                <Text style={styles.zoomBtnText}>🔍 -</Text>
-              </TouchableOpacity>
-              <Text style={styles.scaleText}>{scale.toFixed(1)}x</Text>
-              <TouchableOpacity
-                style={styles.zoomBtn}
+                variant="secondary"
+                size="sm"
+                style={styles.zoomControlBtn}
+              />
+              <View style={styles.scaleBadge}>
+                <Text style={styles.scaleText}>{scale.toFixed(1)}x</Text>
+              </View>
+              <Button
+                title="+"
                 onPress={() => setScale((s) => Math.min(3.0, s + 0.2))}
-              >
-                <Text style={styles.zoomBtnText}>🔍 +</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.resetBtn} onPress={handleReset}>
-                <Text style={styles.resetBtnText}>↺ Reset</Text>
-              </TouchableOpacity>
+                variant="secondary"
+                size="sm"
+                style={styles.zoomControlBtn}
+              />
+              <Button
+                title="Reset"
+                onPress={handleReset}
+                variant="ghost"
+                size="sm"
+                style={styles.resetControlBtn}
+              />
             </View>
           </View>
         </ScrollView>
@@ -306,57 +316,66 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,
-    paddingTop: spacing.xl,
+    paddingTop: spacing.lg,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
+    paddingVertical: spacing.sm + 2,
     borderBottomWidth: 1,
     borderBottomColor: colors.surfaceBorder,
+    backgroundColor: colors.surfaceElevated,
   },
-  headerTitle: {
-    fontSize: typography.fontSizes.md,
-    fontWeight: typography.weights.bold,
-    color: colors.textPrimary,
+  cancelTouch: {
+    paddingVertical: spacing.xs,
+    paddingHorizontal: spacing.xs,
   },
   cancelText: {
     color: colors.textSecondary,
     fontSize: typography.fontSizes.sm,
+    fontFamily: fonts.manrope.medium,
   },
-  applyText: {
-    color: colors.primary,
-    fontWeight: typography.weights.bold,
-    fontSize: typography.fontSizes.sm,
+  headerTitle: {
+    fontSize: typography.fontSizes.md,
+    fontFamily: fonts.manrope.bold,
+    color: colors.textPrimary,
   },
   scrollContainer: {
     flex: 1,
   },
   scrollContent: {
-    paddingBottom: spacing.lg,
+    paddingBottom: spacing.xl,
   },
   workspace: {
     alignItems: 'center',
-    paddingVertical: spacing.sm,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.md,
   },
   instructionText: {
     color: colors.textSecondary,
     fontSize: typography.fontSizes.xs,
-    marginBottom: spacing.xs,
+    fontFamily: fonts.manrope.medium,
+    marginBottom: spacing.md,
+    textAlign: 'center',
   },
   cropContainer: {
     backgroundColor: colors.surface,
     overflow: 'hidden',
-    borderWidth: 2,
-    borderColor: colors.primary,
+    borderWidth: 1,
+    borderColor: colors.surfaceBorderLight,
+    borderRadius: borderRadius.md,
     position: 'relative',
     justifyContent: 'center',
     alignItems: 'center',
   },
-  roundedCropContainer: {
-    borderRadius: borderRadius.round,
+  cropBoxSelfCenter: {
+    alignSelf: 'center',
+  },
+  cropTouchArea: {
+    width: '100%',
+    height: '100%',
   },
   imageWrapper: {
     width: '100%',
@@ -377,39 +396,52 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.15)',
   },
+  whatsappMaskContainer: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: 0,
+    bottom: 0,
+    justifyContent: 'center',
+    alignItems: 'center',
+    overflow: 'hidden',
+  },
+  whatsappMaskCircle: {
+    borderColor: 'rgba(245, 245, 247, 0.72)',
+    backgroundColor: 'transparent',
+  },
+  whatsappMaskRing: {
+    position: 'absolute',
+    borderWidth: 2,
+    borderColor: colors.primary,
+  },
   controlsRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: spacing.md,
-    gap: spacing.sm,
+    justifyContent: 'center',
+    marginTop: spacing.lg,
+    gap: spacing.xs + 4,
   },
-  zoomBtn: {
+  zoomControlBtn: {
+    minWidth: 44,
+  },
+  scaleBadge: {
     backgroundColor: colors.surfaceElevated,
     borderColor: colors.surfaceBorder,
     borderWidth: 1,
-    paddingHorizontal: spacing.sm + 4,
-    paddingVertical: spacing.xs + 2,
     borderRadius: borderRadius.md,
-  },
-  zoomBtnText: {
-    color: colors.textPrimary,
-    fontWeight: typography.weights.bold,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    minWidth: 54,
+    alignItems: 'center',
   },
   scaleText: {
     color: colors.textPrimary,
-    fontWeight: typography.weights.bold,
-    minWidth: 36,
-    textAlign: 'center',
-  },
-  resetBtn: {
-    backgroundColor: colors.surfaceHighlight,
-    paddingHorizontal: spacing.sm + 4,
-    paddingVertical: spacing.xs + 2,
-    borderRadius: borderRadius.md,
-  },
-  resetBtnText: {
-    color: colors.textSecondary,
+    fontFamily: fonts.manrope.bold,
     fontSize: typography.fontSizes.xs,
+  },
+  resetControlBtn: {
+    marginLeft: spacing.xs,
   },
   previewSection: {
     flex: 1,
@@ -553,16 +585,6 @@ const styles = StyleSheet.create({
     fontSize: 9,
     marginTop: 2,
     textAlign: 'center',
-  },
-  cropBoxSelfCenter: {
-    alignSelf: 'center',
-  },
-  cropTouchArea: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    top: 0,
-    bottom: 0,
   },
 });
 

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, View, Image, useWindowDimensions, ViewStyle } from 'react-native';
+import { StyleSheet, View, Image, ViewStyle } from 'react-native';
 import { borderRadius, spacing } from '../../theme/theme';
 
 export interface PresenceImageProps {

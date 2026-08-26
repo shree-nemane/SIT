@@ -6,6 +6,7 @@ export interface UserMember {
   groupId: string;
   displayName: string;
   profileImageId?: string | null;
+  profileImageLocalPath?: string | null;
   joinedAt: string;
 }
 

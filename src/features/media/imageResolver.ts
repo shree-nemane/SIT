@@ -1,4 +1,5 @@
 import { NativeModules, Platform } from 'react-native';
+import kvStorage from '../../data/kvStorage';
 
 const { WidgetBridge } = NativeModules;
 const localFileCache = new Map<string, string>();
@@ -12,8 +13,10 @@ export const imageResolver = {
     const trimmedKey = key.trim();
     if (fileUri && fileUri.trim()) {
       localFileCache.set(trimmedKey, fileUri.trim());
+      kvStorage.setItem(`img_uri_${trimmedKey}`, fileUri.trim()).catch(() => {});
     } else {
       localFileCache.delete(trimmedKey);
+      kvStorage.removeItem(`img_uri_${trimmedKey}`).catch(() => {});
     }
   },
 
@@ -24,6 +27,7 @@ export const imageResolver = {
     for (const key of keys) {
       if (key && key.trim()) {
         localFileCache.delete(key.trim());
+        kvStorage.removeItem(`img_uri_${key.trim()}`).catch(() => {});
       }
     }
   },
@@ -79,6 +83,21 @@ export const imageResolver = {
     const rawId = rawUriOrId ? rawUriOrId.trim() : '';
 
     if (rawId.startsWith('file://') || rawId.startsWith('content://')) return rawId;
+
+    if (rawId) {
+      const kvVal = await kvStorage.getItem(`img_uri_${rawId}`);
+      if (kvVal) {
+        localFileCache.set(rawId, kvVal);
+        return kvVal;
+      }
+    }
+    if (sPath) {
+      const kvVal = await kvStorage.getItem(`img_uri_${sPath}`);
+      if (kvVal) {
+        localFileCache.set(sPath, kvVal);
+        return kvVal;
+      }
+    }
 
     if (Platform.OS === 'android' && WidgetBridge && WidgetBridge.getLocalMediaFile) {
       try {

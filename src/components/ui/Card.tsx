@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, TouchableOpacity, ViewStyle } from 'react-native';
-import { colors, spacing, shadows } from '../../theme/theme';
+import { colors, spacing } from '../../theme/theme';
 
 export type CardVariant = 'default' | 'elevated' | 'highlighted' | 'interactive';
 

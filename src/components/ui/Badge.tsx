@@ -33,8 +33,13 @@ export const Badge: React.FC<BadgeProps> = ({
         break;
       case 'owner':
         base.backgroundColor = 'transparent';
-        base.paddingHorizontal = 0;
+        base.borderColor = colors.surfaceBorder;
+        base.paddingHorizontal = 4;
         base.paddingVertical = 0;
+        base.marginTop = 4;
+        base.marginHorizontal = 6;
+        base.borderWidth = 1;
+        base.borderRadius = 4;
         break;
       case 'group':
         base.backgroundColor = colors.surfaceElevated;

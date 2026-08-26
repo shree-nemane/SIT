@@ -22,11 +22,21 @@ const rawKey = process?.env?.SUPABASE_ANON_KEY || '';
 const isUrlConfigured = rawUrl.startsWith('http');
 const isKeyConfigured = rawKey.length > 10;
 
-if (!isUrlConfigured || !isKeyConfigured) {
-  console.warn(
-    '[ENV Warning] SUPABASE_URL or SUPABASE_ANON_KEY environment variables not provided. Utilizing fallback configuration.'
-  );
-}
+export const getStorageKey = (supabaseUrl: string): string => {
+  if (!supabaseUrl || !supabaseUrl.startsWith('http')) {
+    throw new Error('[Env Configuration Error] SUPABASE_URL is missing or invalid.');
+  }
+  try {
+    const hostname = new URL(supabaseUrl).hostname;
+    const projectRef = hostname.split('.')[0];
+    if (!projectRef) {
+      throw new Error('[Env Configuration Error] Could not extract project ref from SUPABASE_URL.');
+    }
+    return `sb-${projectRef}-auth-token`;
+  } catch (err: any) {
+    throw new Error(`[Env Configuration Error] Failed to derive storage key: ${err?.message}`);
+  }
+};
 
 export const ENV = {
   SUPABASE_URL: isUrlConfigured ? rawUrl : DEFAULT_SUPABASE_URL,

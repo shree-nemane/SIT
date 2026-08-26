@@ -16,13 +16,13 @@
  */
 
 import React, { useEffect, useState } from 'react';
-import { StyleSheet, View, TouchableOpacity, ScrollView } from 'react-native';
+import { StyleSheet, View, TouchableOpacity } from 'react-native';
 import { ScreenContainer } from '../../components/ui/ScreenContainer';
 import { Avatar } from '../../components/ui/Avatar';
 import { Card } from '../../components/ui/Card';
 import { PresenceImage } from '../../components/presence/PresenceImage';
 import Text from '../../components/ui/Text';
-import { colors, spacing, borderRadius } from '../../theme/theme';
+import { colors, spacing } from '../../theme/theme';
 import { formatRelativeTime } from '../../utils/time';
 import MemberRepository from '../../data/repositories/MemberRepository';
 import PresenceRepository from '../../data/repositories/PresenceRepository';
@@ -61,6 +61,16 @@ export const MemberDetailScreen: React.FC<{ route: any; navigation: any }> = ({
 
   const displayName = memberInfo?.displayName || presenceInfo?.displayName || 'Circle Member';
   const avatarUri = memberInfo?.profileImageLocalPath || presenceInfo?.profileImageLocalPath;
+
+  if (isLoading) {
+    return (
+      <ScreenContainer edges={['top']} style={styles.container}>
+        <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()} activeOpacity={0.7}>
+          <Text variant="bodySmall" style={styles.backBtnText}>← Back</Text>
+        </TouchableOpacity>
+      </ScreenContainer>
+    );
+  }
 
   return (
     <ScreenContainer edges={['top']} scrollable contentContainerStyle={styles.scrollContent}>

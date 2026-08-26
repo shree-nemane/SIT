@@ -14,7 +14,7 @@ import { Button } from '../../components/ui/Button';
 import { MemberRow } from '../../components/group/MemberRow';
 import { InviteCodeCard } from '../../components/group/InviteCodeCard';
 import Text from '../../components/ui/Text';
-import { colors, spacing, borderRadius } from '../../theme/theme';
+import { colors, spacing } from '../../theme/theme';
 import { useAuthStore } from '../auth/authStore';
 import MemberRepository, { GroupDetailInfo } from '../../data/repositories/MemberRepository';
 import { api } from '../../data/api';

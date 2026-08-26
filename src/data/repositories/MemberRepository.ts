@@ -109,12 +109,9 @@ export const MemberRepository = {
       if (res.rows && res.rows.length > 0) {
         const row: any = res.rows[0];
         let profileLocalPath = await imageResolver.resolveImageUri(
-          row.profile_image_id,
+          row.profile_image_id || memberId,
           row.profile_storage_path
         );
-        if (!profileLocalPath) {
-          profileLocalPath = imageResolver.getLocalFileUri(memberId);
-        }
         return {
           id: row.id,
           groupId: row.group_id,
@@ -220,7 +217,7 @@ export const MemberRepository = {
       const batchStmts: Array<[string, any[]]> = [];
 
       if (profileLocalPath === null) {
-        // Photo explicitly removed: fetch current imageId & storagePath to purge all cache keys
+        // Photo explicitly removed
         const currentMember = await db.execute(
           `SELECT m.profile_image_id, img.storage_path FROM members m LEFT JOIN images img ON m.profile_image_id = img.id WHERE m.id = ? LIMIT 1;`,
           [memberId]
@@ -239,8 +236,7 @@ export const MemberRepository = {
         profileLocalPath &&
         (profileLocalPath.startsWith('file://') || profileLocalPath.startsWith('content://'))
       ) {
-        // Register local URI with imageResolver for instant offline rendering,
-        // but do not store filesystem path string in profile_image_id column.
+        // Delegate to imageResolver: updates memory RAM cache & persists to kvStorage under img_uri_${memberId}
         imageResolver.setLocalFileUri(memberId, profileLocalPath);
         batchStmts.push([
           `UPDATE members SET display_name = ? WHERE id = ?;`,

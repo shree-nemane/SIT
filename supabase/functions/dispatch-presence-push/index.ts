@@ -83,14 +83,62 @@ async function getGoogleAccessToken(
   return data.access_token;
 }
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-webhook-secret',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
-  'Content-Type': 'application/json',
+const getCorsHeaders = (req: Request) => {
+  const origin = req.headers.get('origin');
+  const allowedOriginEnv = Deno.env.get('ALLOWED_ORIGIN');
+  const supabaseUrlEnv = Deno.env.get('SUPABASE_URL');
+
+  let isAllowed = false;
+
+  if (origin) {
+    try {
+      const parsedOrigin = new URL(origin);
+
+      // 1. Exact configured application origin (ALLOWED_ORIGIN)
+      if (allowedOriginEnv) {
+        try {
+          if (parsedOrigin.origin === new URL(allowedOriginEnv).origin) {
+            isAllowed = true;
+          }
+        } catch {
+          console.error('[CORS] Invalid ALLOWED_ORIGIN configuration');
+        }
+      }
+
+      // 2. Exact Supabase project origin (SUPABASE_URL)
+      if (!isAllowed && supabaseUrlEnv) {
+        try {
+          if (parsedOrigin.origin === new URL(supabaseUrlEnv).origin) {
+            isAllowed = true;
+          }
+        } catch {
+          console.error('[CORS] Invalid SUPABASE_URL configuration');
+        }
+      }
+    } catch {
+      isAllowed = false;
+    }
+  }
+
+  const headers: Record<string, string> = {
+    'Access-Control-Allow-Headers':
+      'authorization, x-client-info, apikey, content-type, x-webhook-secret',
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Content-Type': 'application/json',
+    'Vary': 'Origin',
+  };
+
+  // Fail closed: only emit ACAO for the requesting origin when that exact origin has been authorized.
+  if (isAllowed && origin) {
+    headers['Access-Control-Allow-Origin'] = origin;
+  }
+
+  return headers;
 };
 
 serve(async (req) => {
+  const corsHeaders = getCorsHeaders(req);
+
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
   }

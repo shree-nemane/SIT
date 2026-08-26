@@ -10,7 +10,7 @@ import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { Card } from '../../components/ui/Card';
 import Text from '../../components/ui/Text';
-import { colors, spacing, borderRadius } from '../../theme/theme';
+import { colors, spacing } from '../../theme/theme';
 import { useAuthStore } from '../auth/authStore';
 import MemberRepository from '../../data/repositories/MemberRepository';
 import imagePipeline, { ProcessedImageResult } from '../media/imagePipeline';

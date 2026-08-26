@@ -1,7 +1,6 @@
 import notificationService from '../src/features/notifications/notificationService';
 import useNotificationPreferencesStore from '../src/features/notifications/notificationPreferencesStore';
 import PresenceRepository from '../src/data/repositories/PresenceRepository';
-import kvStorage from '../src/data/kvStorage';
 
 // Mock Dependencies
 jest.mock('@notifee/react-native', () => {
