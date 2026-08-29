@@ -21,14 +21,14 @@ export const useNotificationPreferencesStore = create<NotificationPreferencesSta
         const parsed = JSON.parse(storedVal);
         set({ notificationsEnabled: Boolean(parsed), isLoaded: true });
         if (__DEV__) {
-          console.log('[NotificationPreferencesStore] Restored notificationsEnabled:', Boolean(parsed));
+          // console.log('[NotificationPreferencesStore] Restored notificationsEnabled:', Boolean(parsed));
         }
       } else {
         set({ notificationsEnabled: true, isLoaded: true });
       }
     } catch (err) {
       if (__DEV__) {
-        console.log('[NotificationPreferencesStore] Failed to load notification preferences:', err);
+        // console.log('[NotificationPreferencesStore] Failed to load notification preferences:', err);
       }
       set({ notificationsEnabled: true, isLoaded: true });
     }
@@ -39,11 +39,11 @@ export const useNotificationPreferencesStore = create<NotificationPreferencesSta
     try {
       await kvStorage.setItem(STORAGE_KEY, JSON.stringify(enabled));
       if (__DEV__) {
-        console.log('[NotificationPreferencesStore] Persisted notificationsEnabled:', enabled);
+        // console.log('[NotificationPreferencesStore] Persisted notificationsEnabled:', enabled);
       }
     } catch (err) {
       if (__DEV__) {
-        console.log('[NotificationPreferencesStore] Failed to persist notificationsEnabled:', err);
+        // console.log('[NotificationPreferencesStore] Failed to persist notificationsEnabled:', err);
       }
     }
   },

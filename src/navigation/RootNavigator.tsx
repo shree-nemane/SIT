@@ -6,7 +6,6 @@ import { TabNavigator } from './TabNavigator';
 import { CheckInScreen } from '../features/presence/CheckInScreen';
 import { AuthScreen } from '../features/auth/AuthScreen';
 import { JoinGroupScreen } from '../features/auth/JoinGroupScreen';
-import { SplashScreen } from '../components/SplashScreen';
 import { useAuthStore } from '../features/auth/authStore';
 import { colors } from '../theme/theme';
 import notificationNavigation from '../features/notifications/notificationNavigation';
@@ -66,10 +65,6 @@ export const RootNavigator = () => {
       checkAndNavigate();
     }
   }, [authStatus, membershipStatus, isLoading]);
-
-  if (isLoading) {
-    return <SplashScreen />;
-  }
 
   return (
     <NavigationContainer ref={navigationRef}>

@@ -33,12 +33,12 @@ export const notificationNavigation = {
       await kvStorage.setItem(STORAGE_KEY, JSON.stringify(pendingObj));
     } catch (err) {
       if (__DEV__) {
-        console.log('[NotificationNavigation] Failed to persist pending destination to storage:', err);
+        // console.log('[NotificationNavigation] Failed to persist pending destination to storage:', err);
       }
     }
 
     if (__DEV__) {
-      console.log('[NotificationNavigation] Set pending destination:', pendingObj);
+      // console.log('[NotificationNavigation] Set pending destination:', pendingObj);
     }
   },
 
@@ -64,7 +64,7 @@ export const notificationNavigation = {
       }
     } catch (err) {
       if (__DEV__) {
-        console.log('[NotificationNavigation] Error restoring stored pending destination:', err);
+        // console.log('[NotificationNavigation] Error restoring stored pending destination:', err);
       }
     } finally {
       isStorageLoaded = true;
@@ -99,7 +99,7 @@ export const notificationNavigation = {
     inMemoryPendingDestination = null;
     kvStorage.removeItem(STORAGE_KEY).catch(() => {});
     if (dest && __DEV__) {
-      console.log('[NotificationNavigation] Consumed pending destination:', dest);
+      // console.log('[NotificationNavigation] Consumed pending destination:', dest);
     }
     return dest;
   },

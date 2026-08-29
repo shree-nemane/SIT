@@ -20,13 +20,16 @@ export interface WidgetSnapshotData {
   members: WidgetMemberSnapshot[];
 }
 
+const isSupportedPlatform = () => Platform.OS === 'android';
+
 export const widgetSnapshotService = {
   /**
    * Regenerate group widget snapshot projection from local SQLite database
    * and publish update to native Android widget.
    */
   async updateAndNotifyWidget(): Promise<boolean> {
-    if (Platform.OS !== 'android' || !WidgetBridge) {
+    const bridge = NativeModules?.WidgetBridge;
+    if (!isSupportedPlatform() || !bridge) {
       return false;
     }
 
@@ -50,10 +53,34 @@ export const widgetSnapshotService = {
       };
 
       const jsonString = JSON.stringify(snapshot);
-      await WidgetBridge.updateWidgetSnapshot(jsonString);
+      await bridge.updateWidgetSnapshot(jsonString);
       return true;
     } catch (error) {
-      console.error('[WidgetSnapshot] Failed to update widget snapshot:', error);
+      // console.error('[WidgetSnapshot] Failed to update widget snapshot:', error);
+      return false;
+    }
+  },
+
+  /**
+   * Reset widget state to empty on sign-out and notify Android widget provider.
+   */
+  async clearWidgetSnapshot(): Promise<boolean> {
+    const bridge = NativeModules?.WidgetBridge;
+    if (!isSupportedPlatform() || !bridge) {
+      return false;
+    }
+
+    try {
+      const emptySnapshot: WidgetSnapshotData = {
+        version: 1,
+        updatedAt: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        members: [],
+      };
+
+      const jsonString = JSON.stringify(emptySnapshot);
+      await bridge.updateWidgetSnapshot(jsonString);
+      return true;
+    } catch {
       return false;
     }
   },

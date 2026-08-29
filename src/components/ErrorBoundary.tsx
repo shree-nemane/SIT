@@ -23,7 +23,14 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 
   public componentDidCatch(error: Error, errorInfo: ErrorInfo) {
-    console.error('Uncaught error in Stay in Touch:', error, errorInfo);
+    console.error(
+      '[ErrorBoundary] Caught uncaught crash:',
+      error?.name || 'Error',
+      error?.message || 'Unknown error'
+    );
+    if (__DEV__ && errorInfo?.componentStack) {
+      console.error('[ErrorBoundary] Component stack trace:', errorInfo.componentStack);
+    }
   }
 
   private handleReset = () => {

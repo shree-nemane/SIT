@@ -29,7 +29,7 @@ export const imagePipeline = {
           }
         );
         if (granted !== PermissionsAndroid.RESULTS.GRANTED) {
-          console.warn('[ImagePipeline] Camera permission denied');
+          // console.warn('[ImagePipeline] Camera permission denied');
           return null;
         }
       }
@@ -62,7 +62,7 @@ export const imagePipeline = {
         fileSize: asset.fileSize || 0,
       };
     } catch (error) {
-      console.error('[ImagePipeline] Failed to pick/process image:', error);
+      // console.error('[ImagePipeline] Failed to pick/process image:', error);
       return null;
     }
   },
@@ -140,7 +140,7 @@ export const imagePipeline = {
         fileSize: 200000,
       };
     } catch (error) {
-      console.error('[ImagePipeline] Error cropping image:', error);
+      // console.error('[ImagePipeline] Error cropping image:', error);
       const imageId = `img_${Date.now()}`;
       return {
         imageId,

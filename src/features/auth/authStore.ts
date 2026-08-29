@@ -1,12 +1,13 @@
 import { create } from 'zustand';
 import { Linking } from 'react-native';
 import NetInfo from '@react-native-community/netinfo';
-import { AuthStatus, MembershipStatus, UserMember } from './types';
+import { AuthStatus, MembershipStatus, SessionVerificationStatus, UserMember } from './types';
 import { supabase } from '../../data/supabaseClient';
 import { api } from '../../data/api';
 import MemberRepository from '../../data/repositories/MemberRepository';
 import syncEngine from '../sync/syncEngine';
 import pushService from '../notifications/pushService';
+import widgetSnapshotService from '../widget/widgetSnapshot';
 
 export const parseAndValidateAuthUrl = (url: string | null | undefined): Record<string, string> | null => {
   if (!url || typeof url !== 'string') return null;
@@ -64,11 +65,13 @@ export const parseAndValidateAuthUrl = (url: string | null | undefined): Record<
 interface AuthStore {
   authStatus: AuthStatus;
   membershipStatus: MembershipStatus;
+  sessionVerificationStatus: SessionVerificationStatus;
   userEmail: string | null;
   userId: string | null;
   member: UserMember | null;
   groupName: string | null;
   isLoading: boolean;
+  isAuthInitialized: boolean;
   error: string | null;
 
   // Actions
@@ -81,6 +84,125 @@ interface AuthStore {
 
 let isDeepLinkListenerRegistered = false;
 let isExplicitSigningOut = false;
+let activeSessionToken = 0;
+
+export const getActiveSessionToken = () => activeSessionToken;
+
+export const bumpSessionToken = () => {
+  activeSessionToken++;
+  return activeSessionToken;
+};
+
+const schedulePostBootstrapWork = (
+  userId: string,
+  tokenAtStart: number,
+  set: (state: Partial<AuthStore>) => void,
+  get: () => AuthStore
+) => {
+  setTimeout(() => {
+    // Sibling Task 1: Remote Authority Verification
+    (async () => {
+      if (
+        activeSessionToken !== tokenAtStart ||
+        get().userId !== userId ||
+        get().authStatus !== 'signed_in'
+      ) {
+        return;
+      }
+
+      set({ sessionVerificationStatus: 'verifying' });
+      try {
+        const lookup = await api.getCurrentMember(userId);
+
+        if (
+          activeSessionToken !== tokenAtStart ||
+          get().userId !== userId ||
+          get().authStatus !== 'signed_in'
+        ) {
+          return;
+        }
+
+        if (lookup.status === 'found') {
+          const remoteMember = lookup.member;
+          await MemberRepository.upsertMember(remoteMember);
+
+          let groupName: string | null = null;
+          if (remoteMember.groupId) {
+            groupName = await api.getGroupName(remoteMember.groupId);
+            if (groupName) {
+              await MemberRepository.upsertGroup({
+                id: remoteMember.groupId,
+                name: groupName,
+                ownerId: '',
+              });
+            }
+          }
+
+          if (
+            activeSessionToken !== tokenAtStart ||
+            get().userId !== userId ||
+            get().authStatus !== 'signed_in'
+          ) {
+            return;
+          }
+
+          set({
+            membershipStatus: 'member',
+            member: remoteMember,
+            groupName: groupName || 'Private Group',
+            sessionVerificationStatus: 'verified',
+          });
+        } else if (lookup.status === 'not_found') {
+          // CONFIRMED REVOCATION: Remote Supabase lookup confirmed member record was explicitly deleted
+          await MemberRepository.deleteMember(userId);
+
+          if (
+            activeSessionToken !== tokenAtStart ||
+            get().userId !== userId ||
+            get().authStatus !== 'signed_in'
+          ) {
+            return;
+          }
+
+          set({
+            membershipStatus: 'no_group',
+            member: null,
+            groupName: null,
+            sessionVerificationStatus: 'unknown',
+          });
+        } else {
+          // NETWORK / SERVER FAILURE (lookup.status === 'error'):
+          // KEEP LOCAL SESSION! Do NOT treat as membership revocation!
+          set({ sessionVerificationStatus: 'offline' });
+        }
+      } catch (netErr: any) {
+        if (
+          activeSessionToken === tokenAtStart &&
+          get().userId === userId &&
+          get().authStatus === 'signed_in'
+        ) {
+          set({ sessionVerificationStatus: 'offline' });
+        }
+      }
+    })();
+
+    // Sibling Task 2: Background Synchronization
+    (async () => {
+      if (
+        activeSessionToken !== tokenAtStart ||
+        get().userId !== userId ||
+        get().authStatus !== 'signed_in'
+      ) {
+        return;
+      }
+      const currentState = get();
+      if (currentState.membershipStatus !== 'member') {
+        return;
+      }
+      syncEngine.syncAll();
+    })();
+  }, 0);
+};
 
 const handleSessionUpdate = async (
   set: (state: Partial<AuthStore>) => void,
@@ -88,20 +210,18 @@ const handleSessionUpdate = async (
   session: any,
   event?: string
 ) => {
+  const previousUserId = get().userId;
+  const isUserChange = !session?.user || session.user.id !== previousUserId;
+  const currentToken = isUserChange ? bumpSessionToken() : activeSessionToken;
+
   if (!session || !session.user) {
-    // Guard against Supabase firing SIGNED_OUT due to TOKEN_REFRESH_FAILED while offline.
-    // If we have no network AND we still have a locally-known userId, AND this is NOT an explicit user sign-out, keep the user signed in.
-    // The session will be refreshed automatically when connectivity is restored.
     if (!isExplicitSigningOut && (event === 'TOKEN_REFRESH_FAILED' || event === 'SIGNED_OUT')) {
       const netState = await NetInfo.fetch();
       const isOffline = !netState.isConnected || !netState.isInternetReachable;
       const currentUserId = get().userId;
 
       if (isOffline && currentUserId) {
-        console.log(
-          '[AuthStore] Token refresh failed while offline. Keeping session alive — will retry when network is restored.'
-        );
-        // Do not sign out. The autoRefreshToken will succeed once connectivity is back.
+        set({ sessionVerificationStatus: 'offline' });
         return;
       }
     }
@@ -109,6 +229,7 @@ const handleSessionUpdate = async (
     set({
       authStatus: 'signed_out',
       membershipStatus: 'no_group',
+      sessionVerificationStatus: 'unknown',
       userId: null,
       userEmail: null,
       member: null,
@@ -121,15 +242,16 @@ const handleSessionUpdate = async (
   const userId = session.user.id;
   const userEmail = session.user.email || null;
 
-  // Asynchronously register FCM device token without blocking auth, navigation, or sync
   pushService.registerCurrentDeviceToken(userId).catch((pushErr) => {
     if (__DEV__) {
-      console.log('[AuthStore] Push device token registration skipped/failed:', pushErr);
+      // console.log('[AuthStore] Push device token registration skipped/failed:', pushErr);
     }
   });
 
-  // 1. Read local member profile from SQLite for 0ms offline application startup
+  // 1. Read local member profile from SQLite for fast local-first application startup
   const localMember = await MemberRepository.getMember(userId);
+
+  if (activeSessionToken !== currentToken) return;
 
   if (localMember) {
     const activeMember: UserMember = {
@@ -141,30 +263,44 @@ const handleSessionUpdate = async (
       joinedAt: new Date().toISOString(),
     };
 
+    const localGroupName = localMember.groupId
+      ? await MemberRepository.getGroupName(localMember.groupId)
+      : null;
+
+    // Atomic Local Auth State Commit
     set({
       authStatus: 'signed_in',
       membershipStatus: 'member',
       userId,
       userEmail,
       member: activeMember,
-      groupName: 'Private Group',
+      groupName: localGroupName || 'Private Group',
       isLoading: false,
+      isAuthInitialized: true,
+      sessionVerificationStatus: 'unknown',
     });
-  } else {
-    // Local SQLite member does not exist yet (e.g. initial login on new device/fresh install).
-    // Keep auth loading state active while performing remote membership verification to avoid flashing JoinGroupScreen.
-    set({
-      authStatus: 'signed_in',
-      userId,
-      userEmail,
-      isLoading: true,
-    });
+
+    // Schedule encapsulated background session verification and single sync entry point
+    schedulePostBootstrapWork(userId, currentToken, set, get);
+    return;
   }
 
-  // 2. Remote membership reconciliation & centralized startup sync
+  // 2. Fresh login / new device path (no local SQLite member yet): Perform remote lookup
+  set({
+    authStatus: 'signed_in',
+    userId,
+    userEmail,
+    isLoading: true,
+    sessionVerificationStatus: 'verifying',
+  });
+
   try {
-    const remoteMember = await api.getCurrentMember(userId);
-    if (remoteMember) {
+    const lookup = await api.getCurrentMember(userId);
+
+    if (activeSessionToken !== currentToken || get().userId !== userId) return;
+
+    if (lookup.status === 'found') {
+      const remoteMember = lookup.member;
       await MemberRepository.upsertMember(remoteMember);
 
       let groupName: string | null = null;
@@ -179,35 +315,37 @@ const handleSessionUpdate = async (
         }
       }
 
+      if (activeSessionToken !== currentToken || get().userId !== userId) return;
+
       set({
         membershipStatus: 'member',
         member: remoteMember,
         groupName: groupName || 'Private Group',
         isLoading: false,
+        sessionVerificationStatus: 'verified',
       });
 
-      // Centralized startup sync
-      await syncEngine.syncAll();
-    } else {
-      // Remote lookup confirmed user has no group membership
+      syncEngine.syncAll();
+    } else if (lookup.status === 'not_found') {
       set({
         membershipStatus: 'no_group',
         member: null,
         groupName: null,
         isLoading: false,
+        sessionVerificationStatus: 'unknown',
+      });
+    } else {
+      set({
+        isLoading: false,
+        sessionVerificationStatus: 'offline',
+        error: 'Network connection unavailable. Please check your connection and try again.',
       });
     }
   } catch (netErr: any) {
-    console.log('[AuthStore] Remote membership lookup skipped/failed:', netErr);
-    if (localMember) {
-      set({
-        membershipStatus: 'member',
-        isLoading: false,
-      });
-    } else {
-      // Network error without local member: stop loading without routing to JoinGroupScreen
+    if (activeSessionToken === currentToken && get().userId === userId) {
       set({
         isLoading: false,
+        sessionVerificationStatus: 'offline',
         error: 'Network connection unavailable. Please check your connection and try again.',
       });
     }
@@ -215,89 +353,106 @@ const handleSessionUpdate = async (
 };
 
 let authStateSubscription: { unsubscribe: () => void } | null = null;
+let authInitializePromise: Promise<void> | null = null;
 
 export const useAuthStore = create<AuthStore>((set, get) => ({
   authStatus: 'signed_out',
   membershipStatus: 'no_group',
+  sessionVerificationStatus: 'unknown',
   userEmail: null,
   userId: null,
   member: null,
   groupName: null,
   isLoading: true,
+  isAuthInitialized: false,
   error: null,
 
   initializeAuth: async () => {
-    set({ isLoading: true, error: null });
+    if (get().isAuthInitialized) return;
+    if (authInitializePromise) return authInitializePromise;
 
-    const handleAuthUrl = async (url: string | null) => {
-      if (__DEV__) {
-        console.log('[AuthStore] Received auth callback URL:', url);
+    authInitializePromise = (async () => {
+      set({ isLoading: true, error: null });
+
+      const handleAuthUrl = async (url: string | null) => {
+        if (__DEV__) {
+          // console.log('[AuthStore] Received auth callback URL:', url);
+        }
+        const params = parseAndValidateAuthUrl(url);
+        if (!params) return;
+
+        try {
+          if (params.code) {
+            await supabase.auth.exchangeCodeForSession(params.code);
+          } else if (params.access_token && params.refresh_token) {
+            await supabase.auth.setSession({
+              access_token: params.access_token,
+              refresh_token: params.refresh_token,
+            });
+          }
+        } catch (e: any) {
+          // console.error('[AuthStore] Auth callback processing failed:', e);
+          set({ error: e.message || 'Failed to process auth callback' });
+        }
+      };
+
+      if (!isDeepLinkListenerRegistered) {
+        isDeepLinkListenerRegistered = true;
+        Linking.addEventListener('url', (event) => {
+          handleAuthUrl(event.url);
+        });
       }
-      const params = parseAndValidateAuthUrl(url);
-      if (!params) return;
+
+      const initialUrl = await Linking.getInitialURL();
+      if (initialUrl) {
+        await handleAuthUrl(initialUrl);
+      }
 
       try {
-        if (params.code) {
-          await supabase.auth.exchangeCodeForSession(params.code);
-        } else if (params.access_token && params.refresh_token) {
-          await supabase.auth.setSession({
-            access_token: params.access_token,
-            refresh_token: params.refresh_token,
+        const {
+          data: { session },
+        } = await supabase.auth.getSession();
+        await handleSessionUpdate(set, get, session);
+      } catch (e: any) {
+        // getSession() threw — attempt to recover session from local SQLite before signing out
+        const existingUserId = get().userId;
+        if (existingUserId) {
+          const localMember = await MemberRepository.getMember(existingUserId).catch(() => null);
+          if (localMember) {
+            set({ isLoading: false, error: null, sessionVerificationStatus: 'offline' });
+          } else {
+            set({
+              authStatus: 'signed_out',
+              membershipStatus: 'no_group',
+              sessionVerificationStatus: 'unknown',
+              isLoading: false,
+              error: e.message || 'Failed to check auth state',
+            });
+          }
+        } else {
+          set({
+            authStatus: 'signed_out',
+            membershipStatus: 'no_group',
+            sessionVerificationStatus: 'unknown',
+            isLoading: false,
+            error: e.message || 'Failed to check auth state',
           });
         }
-      } catch (e: any) {
-        console.error('[AuthStore] Auth callback processing failed:', e);
-        set({ error: e.message || 'Failed to process auth callback' });
+      } finally {
+        set({ isAuthInitialized: true, isLoading: false });
+        authInitializePromise = null;
       }
-    };
 
-    if (!isDeepLinkListenerRegistered) {
-      isDeepLinkListenerRegistered = true;
-      Linking.addEventListener('url', (event) => {
-        handleAuthUrl(event.url);
-      });
-    }
-
-    const initialUrl = await Linking.getInitialURL();
-    if (initialUrl) {
-      await handleAuthUrl(initialUrl);
-    }
-
-    try {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-      await handleSessionUpdate(set, get, session);
-    } catch (e: any) {
-      // getSession() threw — likely a SQLite init race on cold start or an op-sqlite error.
-      // Before forcing a logout, attempt to recover the userId from any existing store state
-      // and check local SQLite for a member record. Only sign out if truly unrecoverable.
-      console.warn('[AuthStore] getSession() threw unexpectedly:', e.message);
-      const existingUserId = get().userId;
-      if (existingUserId) {
-        const localMember = await MemberRepository.getMember(existingUserId).catch(() => null);
-        if (localMember) {
-          console.log('[AuthStore] Recovered session from local SQLite after getSession() error.');
-          set({ isLoading: false, error: null });
-          return;
-        }
+      // Subscribe to Supabase auth state changes (registered exactly once across app lifecycle)
+      if (!authStateSubscription) {
+        const { data } = supabase.auth.onAuthStateChange(async (event, session) => {
+          await handleSessionUpdate(set, get, session, event);
+        });
+        authStateSubscription = data?.subscription || null;
       }
-      // Truly unrecoverable — sign out cleanly
-      set({
-        authStatus: 'signed_out',
-        membershipStatus: 'no_group',
-        isLoading: false,
-        error: e.message || 'Failed to check auth state',
-      });
-    }
+    })();
 
-    // Subscribe to Supabase auth state changes (registered exactly once across app lifecycle)
-    if (!authStateSubscription) {
-      const { data } = supabase.auth.onAuthStateChange(async (event, session) => {
-        await handleSessionUpdate(set, get, session, event);
-      });
-      authStateSubscription = data?.subscription || null;
-    }
+    return authInitializePromise;
   },
 
   createGroup: async (groupName: string, displayName: string): Promise<boolean> => {
@@ -317,6 +472,7 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
         member: res.member,
         groupName: groupName.trim(),
         isLoading: false,
+        sessionVerificationStatus: 'verified',
       });
       syncEngine.syncAll();
       return true;
@@ -347,6 +503,7 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
         member: res.member,
         groupName,
         isLoading: false,
+        sessionVerificationStatus: 'verified',
       });
       syncEngine.syncAll();
       return true;
@@ -360,25 +517,34 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
   },
 
   signOut: async () => {
+    bumpSessionToken();
     isExplicitSigningOut = true;
     set({ isLoading: true });
     try {
       await pushService.deactivateCurrentDeviceToken();
     } catch (e) {
       if (__DEV__) {
-        console.log('[AuthStore] Deactivating push token failed gracefully:', e);
+        // console.log('[AuthStore] Deactivating push token failed gracefully:', e);
+      }
+    }
+    try {
+      await widgetSnapshotService.clearWidgetSnapshot();
+    } catch (e) {
+      if (__DEV__) {
+        // console.log('[AuthStore] Clearing widget snapshot failed gracefully:', e);
       }
     }
     try {
       await api.signOut();
     } catch (e) {
       if (__DEV__) {
-        console.log('[AuthStore] Remote sign out failed (offline), clearing local session anyway:', e);
+        // console.log('[AuthStore] Remote sign out failed (offline), clearing local session anyway:', e);
       }
     } finally {
       set({
         authStatus: 'signed_out',
         membershipStatus: 'no_group',
+        sessionVerificationStatus: 'unknown',
         userId: null,
         userEmail: null,
         member: null,

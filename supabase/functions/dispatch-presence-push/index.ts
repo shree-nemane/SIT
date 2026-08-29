@@ -101,7 +101,7 @@ const getCorsHeaders = (req: Request) => {
             isAllowed = true;
           }
         } catch {
-          console.error('[CORS] Invalid ALLOWED_ORIGIN configuration');
+          // console.error('[CORS] Invalid ALLOWED_ORIGIN configuration');
         }
       }
 
@@ -112,7 +112,7 @@ const getCorsHeaders = (req: Request) => {
             isAllowed = true;
           }
         } catch {
-          console.error('[CORS] Invalid SUPABASE_URL configuration');
+          // console.error('[CORS] Invalid SUPABASE_URL configuration');
         }
       }
     } catch {
@@ -152,7 +152,7 @@ serve(async (req) => {
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
 
     if (!firebaseProjectId || !firebaseClientEmail || !firebasePrivateKey) {
-      console.error('[FCM Dispatcher] Missing Firebase service account secrets');
+      // console.error('[FCM Dispatcher] Missing Firebase service account secrets');
       return new Response(
         JSON.stringify({ success: false, error: 'Firebase configuration incomplete on server' }),
         { status: 500, headers: corsHeaders }
@@ -160,7 +160,7 @@ serve(async (req) => {
     }
 
     if (!supabaseUrl || !supabaseServiceKey) {
-      console.error('[FCM Dispatcher] Missing Supabase service credentials');
+      // console.error('[FCM Dispatcher] Missing Supabase service credentials');
       return new Response(
         JSON.stringify({ success: false, error: 'Supabase configuration incomplete on server' }),
         { status: 500, headers: corsHeaders }
@@ -180,7 +180,7 @@ serve(async (req) => {
       }
     } else if (!incomingAuth || !incomingAuth.includes(supabaseServiceKey)) {
       // Fail-closed in production if neither WEBHOOK_SECRET nor service_role key matches
-      console.warn('[FCM Dispatcher] Request received without WEBHOOK_SECRET or service_role authorization');
+      // console.warn('[FCM Dispatcher] Request received without WEBHOOK_SECRET or service_role authorization');
       return new Response(
         JSON.stringify({ success: false, error: 'Unauthorized dispatcher access' }),
         { status: 401, headers: corsHeaders }
@@ -237,7 +237,7 @@ serve(async (req) => {
     }
 
     if (!actorUserId || !groupId) {
-      console.warn('[FCM Dispatcher] Event missing actorUserId or groupId, aborting dispatch');
+      // console.warn('[FCM Dispatcher] Event missing actorUserId or groupId, aborting dispatch');
       return new Response(
         JSON.stringify({ success: false, reason: 'unresolved_group_or_actor' }),
         { status: 200, headers: corsHeaders }
@@ -326,7 +326,7 @@ serve(async (req) => {
         } else {
           failedCount++;
           const errText = await response.text();
-          console.warn(`[FCM Dispatcher] Push failed for device ID ${device.id}: HTTP ${response.status}`);
+          // console.warn(`[FCM Dispatcher] Push failed for device ID ${device.id}: HTTP ${response.status}`);
 
           if (
             response.status === 404 ||
@@ -338,7 +338,7 @@ serve(async (req) => {
         }
       } catch (err: any) {
         failedCount++;
-        console.warn(`[FCM Dispatcher] Push network error for device ID ${device.id}:`, err?.message || err);
+        // console.warn(`[FCM Dispatcher] Push network error for device ID ${device.id}:`, err?.message || err);
       }
     }
 
@@ -348,7 +348,7 @@ serve(async (req) => {
         .update({ is_active: false, updated_at: new Date().toISOString() })
         .in('token', deactivatedTokens);
 
-      console.log(`[FCM Dispatcher] Deactivated ${deactivatedTokens.length} stale push tokens.`);
+      // console.log(`[FCM Dispatcher] Deactivated ${deactivatedTokens.length} stale push tokens.`);
     }
 
     return new Response(
@@ -364,7 +364,7 @@ serve(async (req) => {
       { status: 200, headers: corsHeaders }
     );
   } catch (err: any) {
-    console.error('[FCM Dispatcher] Edge Function error:', err);
+    // console.error('[FCM Dispatcher] Edge Function error:', err);
     return new Response(
       JSON.stringify({ success: false, error: err?.message || String(err) }),
       { status: 500, headers: corsHeaders }

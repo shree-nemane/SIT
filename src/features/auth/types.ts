@@ -1,5 +1,11 @@
 export type AuthStatus = 'signed_out' | 'signed_in';
 export type MembershipStatus = 'no_group' | 'member';
+export type SessionVerificationStatus =
+  | 'unknown'
+  | 'verifying'
+  | 'verified'
+  | 'offline'
+  | 'retry_pending';
 
 export interface UserMember {
   id: string;

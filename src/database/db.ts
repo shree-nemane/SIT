@@ -23,10 +23,10 @@ export const initDatabase = async (): Promise<boolean> => {
     for (const sql of CREATE_TABLES_SQL) {
       await db.execute(sql);
     }
-    console.log('[SQLite] Local database connection initialized successfully.');
+    // console.log('[SQLite] Local database connection initialized successfully.');
     return true;
   } catch (error) {
-    console.error('[SQLite] Failed to initialize database:', error);
+    // console.error('[SQLite] Failed to initialize database:', error);
     return false;
   }
 };

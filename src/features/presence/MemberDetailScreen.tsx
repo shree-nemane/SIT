@@ -50,7 +50,7 @@ export const MemberDetailScreen: React.FC<{ route: any; navigation: any }> = ({
         setPresenceInfo(pres);
       } catch (err) {
         if (__DEV__) {
-          console.log('[MemberDetailScreen] Error loading member details:', err);
+          // console.log('[MemberDetailScreen] Error loading member details:', err);
         }
       } finally {
         setIsLoading(false);

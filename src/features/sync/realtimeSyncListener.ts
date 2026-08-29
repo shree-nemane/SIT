@@ -16,12 +16,12 @@ export const realtimeSyncListener = {
 
     const handleAppStateChange = (nextAppState: AppStateStatus) => {
       if (nextAppState === 'active') {
-        console.log('[RealtimeSync] App foregrounded. Subscribing to Realtime postgres changes...');
+        // console.log('[RealtimeSync] App foregrounded. Subscribing to Realtime postgres changes...');
         realtimeSyncListener.subscribe();
         // Immediately sync on foreground
         syncEngine.syncAll();
       } else if (nextAppState === 'background' || nextAppState === 'inactive') {
-        console.log('[RealtimeSync] App backgrounded. Unsubscribing from Realtime WebSocket...');
+        // console.log('[RealtimeSync] App backgrounded. Unsubscribing from Realtime WebSocket...');
         realtimeSyncListener.unsubscribe();
       }
     };
@@ -46,7 +46,7 @@ export const realtimeSyncListener = {
         'postgres_changes',
         { event: '*', schema: 'public', table: 'presences' },
         (payload) => {
-          console.log(`[RealtimeSync] Presences change detected (${payload.eventType}). Triggering syncEngine.syncAll()...`);
+          // console.log(`[RealtimeSync] Presences change detected (${payload.eventType}). Triggering syncEngine.syncAll()...`);
           syncEngine.syncAll();
         }
       )
@@ -54,12 +54,12 @@ export const realtimeSyncListener = {
         'postgres_changes',
         { event: '*', schema: 'public', table: 'members' },
         (payload) => {
-          console.log(`[RealtimeSync] Members change detected (${payload.eventType}). Triggering syncEngine.syncAll()...`);
+          // console.log(`[RealtimeSync] Members change detected (${payload.eventType}). Triggering syncEngine.syncAll()...`);
           syncEngine.syncAll();
         }
       )
       .subscribe((status) => {
-        console.log(`[RealtimeSync] Channel status: ${status}`);
+        // console.log(`[RealtimeSync] Channel status: ${status}`);
       });
   },
 

@@ -4,6 +4,7 @@ import { api } from '../../data/api';
 import syncEngine from '../sync/syncEngine';
 import notificationService from './notificationService';
 import { SITNotificationPayload } from './notificationTypes';
+import { checkOSNotificationPermission } from './notificationPermissionHelper';
 
 export type SITDataPayload = SITNotificationPayload;
 
@@ -65,6 +66,10 @@ class PushService {
   private foregroundMessageUnsubscribe: (() => void) | null = null;
   private activeUserId: string | null = null;
 
+  getActiveToken(): string | null {
+    return this.activeToken;
+  }
+
   /**
    * Request notification permission on Android 13+ (SDK 36) / iOS
    * Non-blocking, returns boolean result.
@@ -81,7 +86,7 @@ class PushService {
           );
           if (status !== PermissionsAndroid.RESULTS.GRANTED) {
             if (__DEV__) {
-              console.log('[PushService] POST_NOTIFICATIONS permission not granted:', status);
+              // console.log('[PushService] POST_NOTIFICATIONS permission not granted:', status);
             }
             return false;
           }
@@ -94,12 +99,12 @@ class PushService {
         authStatus === messaging.AuthorizationStatus.PROVISIONAL;
 
       if (__DEV__) {
-        console.log('[PushService] Notification authorization status:', authStatus, 'enabled:', enabled);
+        // console.log('[PushService] Notification authorization status:', authStatus, 'enabled:', enabled);
       }
       return enabled;
     } catch (err: any) {
       if (__DEV__) {
-        console.log('[PushService] Permission request failed gracefully:', err?.message || err);
+        // console.log('[PushService] Permission request failed gracefully:', err?.message || err);
       }
       return false;
     }
@@ -109,21 +114,7 @@ class PushService {
    * Check OS system notification permission status non-blockingly without prompting user.
    */
   async checkOSNotificationPermission(): Promise<boolean> {
-    try {
-      if (Platform.OS === 'android' && Platform.Version >= 33) {
-        const hasPermission = await PermissionsAndroid.check(
-          PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS
-        );
-        if (!hasPermission) return false;
-      }
-      const authStatus = await messaging().hasPermission();
-      return (
-        authStatus === messaging.AuthorizationStatus.AUTHORIZED ||
-        authStatus === messaging.AuthorizationStatus.PROVISIONAL
-      );
-    } catch {
-      return false;
-    }
+    return checkOSNotificationPermission();
   }
 
   /**
@@ -136,13 +127,13 @@ class PushService {
       if (token) {
         this.activeToken = token;
         if (__DEV__) {
-          console.log('[PushService] Obtained FCM token (masked):', maskToken(token));
+          // console.log('[PushService] Obtained FCM token (masked):', maskToken(token));
         }
       }
       return token;
     } catch (err: any) {
       if (__DEV__) {
-        console.log('[PushService] Failed to obtain FCM token:', err?.message || err);
+        // console.log('[PushService] Failed to obtain FCM token:', err?.message || err);
       }
       return null;
     }
@@ -193,7 +184,7 @@ class PushService {
       return result.success;
     } catch (err: any) {
       if (__DEV__) {
-        console.log('[PushService] Push device registration encountered non-fatal error:', err?.message || err);
+        console.log('[PushService] Push device registration encountered error:', err?.message || err);
       }
       return false;
     }
@@ -248,6 +239,22 @@ class PushService {
               console.log('[PushService] Foreground sync triggered by FCM error:', err);
             }
           });
+
+          // Display visible notification banner when app is in foreground
+          try {
+            await notificationService.showPresenceUpdateNotification({
+              presenceId: payload.presenceId,
+              actorName: payload.actorName,
+              actorId: payload.actorId,
+              groupId: payload.groupId,
+              reason: payload.reason,
+              description: payload.description,
+            });
+          } catch (notifErr) {
+            if (__DEV__) {
+              console.log('[PushService] Failed to display foreground notification:', notifErr);
+            }
+          }
         }
       });
     } catch (err: any) {
@@ -280,12 +287,12 @@ class PushService {
 
       const result = await api.deactivatePushDevice(token);
       if (__DEV__) {
-        console.log('[PushService] Deactivated push device token result:', result.success);
+        // console.log('[PushService] Deactivated push device token result:', result.success);
       }
       return result.success;
     } catch (err: any) {
       if (__DEV__) {
-        console.log('[PushService] Token deactivation encountered non-fatal error:', err?.message || err);
+        // console.log('[PushService] Token deactivation encountered non-fatal error:', err?.message || err);
       }
       return false;
     }

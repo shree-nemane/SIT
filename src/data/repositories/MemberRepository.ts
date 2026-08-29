@@ -48,7 +48,7 @@ export const MemberRepository = {
       );
       return true;
     } catch (error) {
-      console.error('[MemberRepository] Failed to upsert group:', error);
+      // console.error('[MemberRepository] Failed to upsert group:', error);
       return false;
     }
   },
@@ -88,7 +88,7 @@ export const MemberRepository = {
       );
       return true;
     } catch (error) {
-      console.error('[MemberRepository] Failed to upsert member:', error);
+      // console.error('[MemberRepository] Failed to upsert member:', error);
       return false;
     }
   },
@@ -122,7 +122,26 @@ export const MemberRepository = {
       }
       return null;
     } catch (error) {
-      console.error('[MemberRepository] Failed to get member:', error);
+      // console.error('[MemberRepository] Failed to get member:', error);
+      return null;
+    }
+  },
+
+  /**
+   * Fetch group name from local SQLite
+   */
+  async getGroupName(groupId: string): Promise<string | null> {
+    const db = getDB();
+    try {
+      const res = await db.execute(
+        'SELECT name FROM groups WHERE id = ? LIMIT 1;',
+        [groupId]
+      );
+      if (res.rows && res.rows.length > 0) {
+        return (res.rows[0] as any).name || null;
+      }
+      return null;
+    } catch {
       return null;
     }
   },
@@ -188,7 +207,7 @@ export const MemberRepository = {
         members: membersList,
       };
     } catch (error) {
-      console.error('[MemberRepository] Failed to get group info and members:', error);
+      // console.error('[MemberRepository] Failed to get group info and members:', error);
       return null;
     }
   },
@@ -258,7 +277,20 @@ export const MemberRepository = {
       await db.executeBatch(batchStmts);
       return true;
     } catch (error) {
-      console.error('[MemberRepository] Failed to update member profile locally:', error);
+      // console.error('[MemberRepository] Failed to update member profile locally:', error);
+      return false;
+    }
+  },
+
+  /**
+   * Delete member record from local SQLite
+   */
+  async deleteMember(memberId: string): Promise<boolean> {
+    const db = getDB();
+    try {
+      await db.execute('DELETE FROM members WHERE id = ?;', [memberId]);
+      return true;
+    } catch {
       return false;
     }
   },

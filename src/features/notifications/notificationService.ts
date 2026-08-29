@@ -1,9 +1,9 @@
 import notifee, { AndroidImportance, EventType } from '@notifee/react-native';
 import notificationNavigation from './notificationNavigation';
 import MemberRepository from '../../data/repositories/MemberRepository';
-import pushService from './pushService';
 import useNotificationPreferencesStore from './notificationPreferencesStore';
 import { NotificationDestination } from './notificationTypes';
+import { checkOSNotificationPermission } from './notificationPermissionHelper';
 
 export interface PresenceNotificationOptions {
   presenceId?: string | null;
@@ -48,34 +48,32 @@ export const notificationService = {
     // 0. Silent deletion events NEVER show visible notification banners
     if (options?.reason === 'PRESENCE_DELETED') {
       if (__DEV__) {
-        console.log('[NotificationService] PRESENCE_DELETED event received — skipping visible notification banner for silent sync.');
+        // console.log('[NotificationService] PRESENCE_DELETED event received — skipping visible notification banner for silent sync.');
       }
       return false;
     }
 
-    const prefs = useNotificationPreferencesStore.getState();
+    let prefs = useNotificationPreferencesStore.getState();
 
-    // 1. Conservative safety: if preferences store is not loaded yet, do NOT show visible notification
+    // 1. Conservative safety: if preferences store is not loaded yet, load preferences on demand
     if (!prefs.isLoaded) {
-      if (__DEV__) {
-        console.log('[NotificationService] Preferences not loaded yet — skipping visible notification.');
-      }
-      return false;
+      await useNotificationPreferencesStore.getState().loadPreferences();
+      prefs = useNotificationPreferencesStore.getState();
     }
 
     // 2. Check user in-app preference
     if (!prefs.notificationsEnabled) {
       if (__DEV__) {
-        console.log('[NotificationService] Quiet Mode active (notificationsEnabled is false) — skipping visible notification.');
+        // console.log('[NotificationService] Quiet Mode active (notificationsEnabled is false) — skipping visible notification.');
       }
       return false;
     }
 
     // 3. Check OS notification permission
-    const osPermissionGranted = await pushService.checkOSNotificationPermission();
+    const osPermissionGranted = await checkOSNotificationPermission();
     if (!osPermissionGranted) {
       if (__DEV__) {
-        console.log('[NotificationService] OS notification permission denied — skipping visible notification.');
+        // console.log('[NotificationService] OS notification permission denied — skipping visible notification.');
       }
       return false;
     }
@@ -89,7 +87,7 @@ export const notificationService = {
     const lastSeen = recentEvents.get(dedupeKey);
     if (lastSeen && now - lastSeen < DEDUPE_TTL_MS) {
       if (__DEV__) {
-        console.log('[NotificationService] Suppressed duplicate notification event:', dedupeKey);
+        // console.log('[NotificationService] Suppressed duplicate notification event:', dedupeKey);
       }
       return false;
     }
@@ -126,12 +124,12 @@ export const notificationService = {
 
       isChannelCreated = true;
       if (__DEV__) {
-        console.log('[NotificationService] Android notification channels (high & quiet) initialized.');
+        // console.log('[NotificationService] Android notification channels (high & quiet) initialized.');
       }
       return CHANNEL_ID;
     } catch (err: any) {
       if (__DEV__) {
-        console.log('[NotificationService] Failed to create notification channel:', err?.message || err);
+        // console.log('[NotificationService] Failed to create notification channel:', err?.message || err);
       }
       return CHANNEL_ID;
     }
@@ -201,6 +199,7 @@ export const notificationService = {
         android: {
           channelId: CHANNEL_ID,
           importance: AndroidImportance.HIGH,
+          smallIcon: 'app_notification_icon',
           pressAction: {
             id: 'default',
           },
@@ -208,17 +207,17 @@ export const notificationService = {
       });
 
       if (__DEV__) {
-        console.log('[NotificationService] Presence notification displayed:', {
-          id: notificationId,
-          title: titleText,
-          body: bodyText,
-        });
+        // console.log('[NotificationService] Presence notification displayed:', {
+          // id: notificationId,
+          // title: titleText,
+          // body: bodyText,
+        // });
       }
 
       return notificationId;
     } catch (err: any) {
       if (__DEV__) {
-        console.log('[NotificationService] Failed to display presence notification gracefully:', err?.message || err);
+        // console.log('[NotificationService] Failed to display presence notification gracefully:', err?.message || err);
       }
       return null;
     }
@@ -235,7 +234,7 @@ export const notificationService = {
     notifee.onForegroundEvent(({ type, detail }) => {
       if (type === EventType.PRESS) {
         if (__DEV__) {
-          console.log('[NotificationService] Foreground notification tapped:', detail.notification?.data);
+          // console.log('[NotificationService] Foreground notification tapped:', detail.notification?.data);
         }
         const rawTarget = (detail.notification?.data?.target as string) || 'Today';
         const target: NotificationDestination = (['Today', 'Group', 'Profile', 'CheckIn', 'Settings'].includes(rawTarget))
@@ -254,10 +253,10 @@ export const notificationService = {
     notifee.getInitialNotification().then((initialNotification) => {
       if (initialNotification && initialNotification.pressAction) {
         if (__DEV__) {
-          console.log(
-            '[NotificationService] App launched from terminated state via notification:',
-            initialNotification.notification.data
-          );
+          // console.log(
+            // '[NotificationService] App launched from terminated state via notification:',
+            // initialNotification.notification.data
+          // );
         }
         const rawTarget = (initialNotification.notification?.data?.target as string) || 'Today';
         const target: NotificationDestination = (['Today', 'Group', 'Profile', 'CheckIn', 'Settings'].includes(rawTarget))
@@ -278,7 +277,7 @@ export const notificationService = {
 notifee.onBackgroundEvent(async ({ type, detail }) => {
   if (type === EventType.PRESS) {
     if (__DEV__) {
-      console.log('[NotificationService] Background notification tapped:', detail.notification?.data);
+      // console.log('[NotificationService] Background notification tapped:', detail.notification?.data);
     }
     const rawTarget = (detail.notification?.data?.target as string) || 'Today';
     const target: NotificationDestination = (['Today', 'Group', 'Profile', 'CheckIn', 'Settings'].includes(rawTarget))

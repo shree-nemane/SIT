@@ -33,7 +33,7 @@ export const SyncQueueRepository = {
         lastError: row.last_error,
       }));
     } catch (error) {
-      console.error('[SyncQueueRepository] Failed to fetch sync queue items:', error);
+      // console.error('[SyncQueueRepository] Failed to fetch sync queue items:', error);
       return [];
     }
   },

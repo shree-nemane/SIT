@@ -21,7 +21,7 @@ export const syncPush = {
       try {
         // Discard legacy broken items if retried more than 5 times
         if (item.retryCount > 5) {
-          console.warn(`[SyncPush] Discarding unresolvable sync queue item: ${item.id}`);
+          // console.warn(`[SyncPush] Discarding unresolvable sync queue item: ${item.id}`);
           await db.execute('DELETE FROM sync_queue WHERE id = ?;', [item.id]);
           continue;
         }
@@ -34,7 +34,7 @@ export const syncPush = {
 
         // Handle Presence Deletion
         if (item.operation === 'DELETE') {
-          console.log(`[SyncPush] Processing DELETE presence for member: ${validMemberId}`);
+          // console.log(`[SyncPush] Processing DELETE presence for member: ${validMemberId}`);
 
           // 1. Fetch remote presence image ID before deleting presence
           const { data: existingPresence } = await supabase
@@ -67,21 +67,21 @@ export const syncPush = {
               if (imgRecord?.storage_path) {
                 await supabase.from('images').delete().eq('id', oldImageId);
                 await supabase.storage.from('presence-images').remove([imgRecord.storage_path]);
-                console.log(`[SyncPush] Successfully cleaned up image: ${imgRecord.storage_path}`);
+                // console.log(`[SyncPush] Successfully cleaned up image: ${imgRecord.storage_path}`);
               }
             } catch (cleanupErr) {
-              console.warn('[SyncPush] Image cleanup warning:', cleanupErr);
+              // console.warn('[SyncPush] Image cleanup warning:', cleanupErr);
             }
           }
 
           await db.execute('DELETE FROM sync_queue WHERE id = ?;', [item.id]);
-          console.log(`[SyncPush] Successfully synced presence deletion item: ${item.id}`);
+          // console.log(`[SyncPush] Successfully synced presence deletion item: ${item.id}`);
           continue;
         }
 
         // Handle Profile Updates
         if (item.operation === 'UPDATE_PROFILE') {
-          console.log(`[SyncPush] Processing UPDATE_PROFILE for member: ${validMemberId}`);
+          // console.log(`[SyncPush] Processing UPDATE_PROFILE for member: ${validMemberId}`);
           let profileImageUuid: string | null = null;
           let uploadedStoragePath: string | null = null;
           let fileByteSize = 0;
@@ -119,7 +119,7 @@ export const syncPush = {
                 }
               }
             } catch (pErr) {
-              console.warn('[SyncPush] Profile image upload warning:', pErr);
+              // console.warn('[SyncPush] Profile image upload warning:', pErr);
             }
           }
 
@@ -173,7 +173,7 @@ export const syncPush = {
           batchStmts.push(['DELETE FROM sync_queue WHERE id = ?;', [item.id]]);
           await db.executeBatch(batchStmts);
 
-          console.log(`[SyncPush] Successfully synced profile update item: ${item.id}`);
+          // console.log(`[SyncPush] Successfully synced profile update item: ${item.id}`);
           continue;
         }
 
@@ -216,7 +216,7 @@ export const syncPush = {
               }
             }
           } catch (imgError: any) {
-            console.error('[SyncPush] Image upload exception:', imgError?.message || imgError);
+            // console.error('[SyncPush] Image upload exception:', imgError?.message || imgError);
           }
         }
 
@@ -276,9 +276,9 @@ export const syncPush = {
 
         await db.executeBatch(batchStmts);
 
-        console.log(`[SyncPush] Successfully synced presence item: ${item.id}`);
+        // console.log(`[SyncPush] Successfully synced presence item: ${item.id}`);
       } catch (err: any) {
-        console.error(`[SyncPush] Error processing item ${item.id}:`, err);
+        // console.error(`[SyncPush] Error processing item ${item.id}:`, err);
         const retryCount = item.retryCount + 1;
         const errorMsg = err.message || 'Push sync failed';
 

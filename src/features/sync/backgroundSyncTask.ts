@@ -1,45 +1,37 @@
 import syncEngine from './syncEngine';
+import bootstrapBackgroundRuntime from './backgroundRuntime';
+import { SyncSource } from './syncValidator';
 
 /**
- * Headless JS Background Task for WorkManager background synchronization.
- * Invokes the central syncEngine.syncAll() reconciliation engine in the background
- * even when the application UI is inactive or terminated.
+ * Headless JS Background Task for synchronization.
+ * Bootstraps durable background runtime context before invoking syncEngine.
  */
 
 export interface BackgroundSyncTaskData {
-  source?: string;
+  source?: SyncSource | string;
   reason?: string;
   [key: string]: any;
 }
 
 export const backgroundSyncTask = async (taskData?: BackgroundSyncTaskData): Promise<void> => {
-  const source = taskData?.source || 'workmanager';
-  const reason = taskData?.reason || 'periodic_sync';
-
-  if (__DEV__) {
-    console.log('[BackgroundSyncTask] Background sync started', {
-      source,
-      reason,
-      timestamp: new Date().toISOString(),
-    });
-  }
+  const source: SyncSource = (taskData?.source as SyncSource) || 'background_fcm';
 
   try {
-    // Invoke the single, centralized reconciliation engine.
-    // SyncEngine internal activeSyncPromise concurrency lock prevents concurrent duplicate syncs.
-    const success = await syncEngine.syncAll();
+    // 1. Perform durable local-first runtime bootstrap
+    const context = await bootstrapBackgroundRuntime(source);
 
-    if (__DEV__) {
-      console.log('[BackgroundSyncTask] Background sync completed', {
-        success,
-        source,
-        reason,
-        timestamp: new Date().toISOString(),
-      });
+    if (!context) {
+      if (__DEV__) {
+        // console.log('[BackgroundSyncTask] Background runtime bootstrap aborted (no valid session/member)');
+      }
+      return;
     }
+
+    // 2. Invoke the central reconciliation engine with explicit background context
+    await syncEngine.syncAll(context);
   } catch (error: any) {
     if (__DEV__) {
-      console.log('[BackgroundSyncTask] Background sync error caught safely:', error?.message || error);
+      // console.log('[BackgroundSyncTask] Background sync error caught safely:', error?.message || error);
     }
   }
 

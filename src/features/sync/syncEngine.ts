@@ -2,8 +2,22 @@ import { supabase } from '../../data/supabaseClient';
 import { api } from '../../data/api';
 import syncPush from './syncPush';
 import syncPull from './syncPull';
+import MemberRepository from '../../data/repositories/MemberRepository';
+import SyncExecutionContextValidator, {
+  SyncExecutionContext,
+  SyncSource,
+} from './syncValidator';
 
-let activeSyncPromise: Promise<boolean> | null = null;
+export interface ActiveSyncContext {
+  promise: Promise<boolean>;
+  sessionToken: number;
+  userId: string;
+  groupId: string;
+}
+
+let activeSyncContext: ActiveSyncContext | null = null;
+
+export const getActiveSyncContext = (): ActiveSyncContext | null => activeSyncContext;
 
 const syncListeners = new Set<() => void>();
 
@@ -27,65 +41,151 @@ export const syncEngine = {
       try {
         listener();
       } catch (err) {
-        console.error('[SyncEngine] Error in sync listener:', err);
+        // console.error('[SyncEngine] Error in sync listener:', err);
       }
     });
   },
 
   /**
    * Main synchronization entry point.
-   * Guarded by concurrency lock `activeSyncPromise`. Re-uses active in-flight sync promise if currently running.
+   * Guarded by session-aware concurrency lock `activeSyncContext`.
    */
-  async syncAll(): Promise<boolean> {
-    if (activeSyncPromise) {
-      console.log('[SyncEngine] Sync cycle already in progress. Awaiting existing sync promise.');
-      return activeSyncPromise;
+  async syncAll(explicitContext?: Partial<SyncExecutionContext>): Promise<boolean> {
+    const { useAuthStore, getActiveSessionToken } = require('../auth/authStore');
+    const currentSessionToken = explicitContext?.sessionToken ?? getActiveSessionToken();
+    const currentAuthState = useAuthStore.getState();
+    const targetUserId = explicitContext?.userId || currentAuthState.userId;
+    const targetGroupId = explicitContext?.groupId || currentAuthState.member?.groupId;
+
+    // Reuse lock ONLY if matching the exact live session, user, and group
+    if (
+      activeSyncContext &&
+      activeSyncContext.sessionToken === currentSessionToken &&
+      activeSyncContext.userId === targetUserId &&
+      activeSyncContext.groupId === targetGroupId
+    ) {
+      return activeSyncContext.promise;
     }
 
-    activeSyncPromise = (async (): Promise<boolean> => {
-      console.log('[SyncEngine] Starting synchronization cycle...');
-      try {
-        // Step 1: Validate active session
+    try {
+      let startUserId = explicitContext?.userId || '';
+      let startGroupId = explicitContext?.groupId || '';
+
+      // Step 1: Resolve active session and group context if not explicitly provided
+      if (!startUserId || !startGroupId) {
         const {
           data: { session },
           error: sessionErr,
         } = await supabase.auth.getSession();
 
         if (sessionErr || !session || !session.user) {
-          console.warn('[SyncEngine] No active session. Halting sync safely without modifying local data.');
           return false;
         }
 
-        const userId = session.user.id;
-        const currentMember = await api.getCurrentMember(userId);
+        startUserId = session.user.id;
 
-        if (!currentMember || !currentMember.groupId) {
-          console.log('[SyncEngine] User is not part of a group yet. Halting sync.');
-          return false;
+        const localMember = await MemberRepository.getMember(startUserId);
+        if (localMember && localMember.groupId) {
+          startGroupId = localMember.groupId;
+        } else {
+          const lookup = await api.getCurrentMember(startUserId);
+          if (lookup.status !== 'found' || !lookup.member.groupId) {
+            return false;
+          }
+          startGroupId = lookup.member.groupId;
         }
-
-        // Step 2: Push pending local operations to cloud
-        await syncPush.processPendingQueue(userId);
-
-        // Step 3: Pull remote group, member & presence changes from cloud
-        const pullSuccess = await syncPull.pullRemoteChanges(currentMember.groupId);
-
-        if (pullSuccess) {
-          console.log('[SyncEngine] Synchronization cycle completed successfully.');
-          syncEngine.notifyListeners();
-          return true;
-        }
-
-        return false;
-      } catch (error) {
-        console.error('[SyncEngine] Error during syncAll execution:', error);
-        return false;
-      } finally {
-        activeSyncPromise = null;
       }
-    })();
 
-    return activeSyncPromise;
+      const startSessionToken = currentSessionToken;
+      const syncSource: SyncSource = explicitContext?.source || 'manual';
+
+      const fullContext: SyncExecutionContext = {
+        sessionToken: startSessionToken,
+        userId: startUserId,
+        groupId: startGroupId,
+        source: syncSource,
+      };
+
+      if (
+        activeSyncContext &&
+        activeSyncContext.sessionToken === startSessionToken &&
+        activeSyncContext.userId === startUserId &&
+        activeSyncContext.groupId === startGroupId
+      ) {
+        return activeSyncContext.promise;
+      }
+
+      // Construct ActiveSyncContext object & assign activeSyncContext BEFORE async execution starts
+      const thisContext: ActiveSyncContext = {
+        promise: null as any,
+        sessionToken: startSessionToken,
+        userId: startUserId,
+        groupId: startGroupId,
+      };
+
+      activeSyncContext = thisContext;
+
+      // Start actual async sync execution
+      const executionPromise = (async (): Promise<boolean> => {
+        try {
+          // Pre-fetch Checkpoint #1 Validation
+          const isPreFetchValid = await SyncExecutionContextValidator.validateContext(
+            fullContext,
+            'pre_fetch'
+          );
+          if (!isPreFetchValid) {
+            return false;
+          }
+
+          // Step 2: Push pending local operations to cloud
+          await syncPush.processPendingQueue(startUserId);
+
+          // Step 3: Pull remote group, member & presence changes from cloud
+          const shouldContinueSync = async (): Promise<boolean> => {
+            return await SyncExecutionContextValidator.validateContext(
+              fullContext,
+              'pre_commit'
+            );
+          };
+
+          if (!(await shouldContinueSync())) {
+            return false;
+          }
+
+          const pullSuccess = await syncPull.pullRemoteChanges(
+            startGroupId,
+            shouldContinueSync
+          );
+
+          if (pullSuccess) {
+            try {
+              const updatedGroupName = await MemberRepository.getGroupName(startGroupId);
+              if (updatedGroupName && (await shouldContinueSync())) {
+                useAuthStore.setState({ groupName: updatedGroupName });
+              }
+            } catch {}
+            syncEngine.notifyListeners();
+            return true;
+          }
+
+          return false;
+        } catch (error) {
+          return false;
+        } finally {
+          // Safely clear lock only if this exact context still owns it
+          if (activeSyncContext === thisContext) {
+            activeSyncContext = null;
+          }
+        }
+      })();
+
+      // Attach/store execution promise
+      thisContext.promise = executionPromise;
+
+      return executionPromise;
+    } catch {
+      return false;
+    }
   },
 };
 

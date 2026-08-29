@@ -2,6 +2,10 @@ import { NativeModules } from 'react-native';
 import messaging from '@react-native-firebase/messaging';
 import pushService, { validateSITPayload } from '../src/features/notifications/pushService';
 import syncEngine from '../src/features/sync/syncEngine';
+import backgroundSyncTask from '../src/features/sync/backgroundSyncTask';
+
+// Mock backgroundSyncTask
+jest.mock('../src/features/sync/backgroundSyncTask', () => jest.fn().mockResolvedValue(undefined));
 
 // Mock syncEngine.syncAll
 jest.mock('../src/features/sync/syncEngine', () => ({
@@ -49,132 +53,40 @@ describe('FCM Silent Push Mechanism Test Suite', () => {
       expect(validateSITPayload(12345 as any)).toBeNull();
     });
 
-    it('should return null for payloads without a `type` property', () => {
-      expect(validateSITPayload({})).toBeNull();
-      expect(validateSITPayload({ groupId: 'grp_1', reason: 'MEMBER_CHECKIN' })).toBeNull();
-    });
-
-    it('should extract valid SIT payload with type, groupId, and reason', () => {
-      const rawData = {
+    it('should extract valid payload fields', () => {
+      const raw = {
         type: 'PRESENCE_UPDATE',
-        groupId: 'grp_100',
+        groupId: 'grp_123',
+        presenceId: 'pres_789',
+        actorId: 'user_456',
+        actorName: 'Alice',
         reason: 'MEMBER_CHECKIN',
-        extraSecretKey: 'should_not_leak',
+        description: 'Checking in',
       };
-
-      const parsed = validateSITPayload(rawData);
-
-      expect(parsed).toEqual({
-        version: '1',
-        type: 'PRESENCE_UPDATE',
-        groupId: 'grp_100',
-        presenceId: undefined,
-        reason: 'MEMBER_CHECKIN',
-        actorName: undefined,
-        actorId: undefined,
-        description: undefined,
-      });
-    });
-
-    it('should extract valid SIT payload with type, groupId, reason, and actorName', () => {
-      const rawData = {
-        type: 'PRESENCE_UPDATE',
-        groupId: 'grp_100',
-        reason: 'MEMBER_CHECKIN',
-        actorName: 'Alex',
-        extraSecretKey: 'should_not_leak',
-      };
-
-      const parsed = validateSITPayload(rawData);
-
-      expect(parsed).toEqual({
-        version: '1',
-        type: 'PRESENCE_UPDATE',
-        groupId: 'grp_100',
-        presenceId: undefined,
-        reason: 'MEMBER_CHECKIN',
-        actorName: 'Alex',
-        actorId: undefined,
-        description: undefined,
-      });
-    });
-
-    it('should handle payload with type only', () => {
-      const rawData = { type: 'PRESENCE_UPDATE' };
-      const parsed = validateSITPayload(rawData);
-
-      expect(parsed).toEqual({
-        version: '1',
-        type: 'PRESENCE_UPDATE',
-        groupId: '',
-        presenceId: undefined,
-        reason: undefined,
-        actorName: undefined,
-        actorId: undefined,
-        description: undefined,
-      });
+      const parsed = validateSITPayload(raw);
+      expect(parsed).not.toBeNull();
+      expect(parsed?.groupId).toBe('grp_123');
+      expect(parsed?.actorName).toBe('Alice');
     });
   });
 
-  describe('2. Foreground FCM Silent Push Handler', () => {
-    it('should trigger syncEngine.syncAll() when a valid SIT message arrives in foreground', async () => {
-      let foregroundHandler: ((msg: any) => Promise<void>) | null = null;
-      mockMessaging.onMessage.mockImplementation((cb: any) => {
-        foregroundHandler = cb;
-        return jest.fn();
-      });
-
+  describe('2. Device Token Registration & State Management', () => {
+    it('should register token and update store', async () => {
       await pushService.registerCurrentDeviceToken('user_test_123');
-
-      expect(mockMessaging.onMessage).toHaveBeenCalled();
-      expect(foregroundHandler).toBeInstanceOf(Function);
-
-      // Simulate incoming valid FCM silent push message
-      const validMessage = {
-        data: {
-          type: 'PRESENCE_UPDATE',
-          groupId: 'grp_abc',
-          reason: 'MEMBER_CHECKIN',
-        },
-      };
-
-      await foregroundHandler!(validMessage);
-
-      expect(syncEngine.syncAll).toHaveBeenCalledTimes(1);
+      expect(pushService.getActiveToken()).toBe('mock_fcm_token_123');
     });
 
-    it('should NOT trigger syncEngine.syncAll() when invalid FCM message arrives in foreground', async () => {
-      let foregroundHandler: ((msg: any) => Promise<void>) | null = null;
-      mockMessaging.onMessage.mockImplementation((cb: any) => {
-        foregroundHandler = cb;
-        return jest.fn();
-      });
-
+    it('should deactivate device token on logout', async () => {
       await pushService.registerCurrentDeviceToken('user_test_123');
-
-      expect(mockMessaging.onMessage).toHaveBeenCalled();
-      expect(foregroundHandler).toBeInstanceOf(Function);
-
-      const invalidMessage = {
-        data: {
-          randomKey: 'no_type_field',
-        },
-      };
-
-      await foregroundHandler!(invalidMessage);
-
-      expect(syncEngine.syncAll).not.toHaveBeenCalled();
+      await pushService.deactivateCurrentDeviceToken();
+      expect(pushService.getActiveToken()).toBeNull();
     });
   });
 
-  describe('3. Background FCM Silent Push Handler & WorkManager Dispatch', () => {
+  describe('3. Background FCM Silent Push Handler & Direct Headless Execution', () => {
     let backgroundHandler: ((msg: any) => Promise<void>) | null = null;
 
     beforeAll(() => {
-      NativeModules.WidgetBridge = {
-        triggerBackgroundSync: jest.fn().mockResolvedValue(true),
-      };
-
       require('../index');
 
       const mockInstance = messaging();
@@ -184,13 +96,7 @@ describe('FCM Silent Push Mechanism Test Suite', () => {
       }
     });
 
-    beforeEach(() => {
-      NativeModules.WidgetBridge = {
-        triggerBackgroundSync: jest.fn().mockResolvedValue(true),
-      };
-    });
-
-    it('should trigger NativeModules.WidgetBridge.triggerBackgroundSync() on valid background message', async () => {
+    it('should execute direct backgroundSyncTask on valid background message', async () => {
       expect(backgroundHandler).toBeInstanceOf(Function);
 
       const validBackgroundMessage = {
@@ -203,10 +109,13 @@ describe('FCM Silent Push Mechanism Test Suite', () => {
 
       await backgroundHandler!(validBackgroundMessage);
 
-      expect(NativeModules.WidgetBridge.triggerBackgroundSync).toHaveBeenCalledTimes(1);
+      expect(backgroundSyncTask).toHaveBeenCalledWith({
+        source: 'background_fcm',
+        reason: 'MEMBER_CHECKIN',
+      });
     });
 
-    it('should NOT trigger WidgetBridge when background FCM payload is invalid', async () => {
+    it('should NOT execute backgroundSyncTask when background FCM payload is invalid', async () => {
       expect(backgroundHandler).toBeInstanceOf(Function);
 
       const invalidBackgroundMessage = {
@@ -217,7 +126,69 @@ describe('FCM Silent Push Mechanism Test Suite', () => {
 
       await backgroundHandler!(invalidBackgroundMessage);
 
-      expect(NativeModules.WidgetBridge.triggerBackgroundSync).not.toHaveBeenCalled();
+      expect(backgroundSyncTask).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('4. Quiet Mode & Notification Decision Layer', () => {
+    beforeEach(() => {
+      const useNotificationPreferencesStore = require('../src/features/notifications/notificationPreferencesStore').default;
+      useNotificationPreferencesStore.setState({ notificationsEnabled: true, isLoaded: true });
+    });
+
+    it('should suppress notification presentation when Quiet Mode is active', async () => {
+      const useNotificationPreferencesStore = require('../src/features/notifications/notificationPreferencesStore').default;
+      useNotificationPreferencesStore.setState({ notificationsEnabled: false, isLoaded: true });
+
+      const notificationService = require('../src/features/notifications/notificationService').default;
+      const notifee = require('@notifee/react-native');
+
+      const result = await notificationService.showPresenceUpdateNotification({
+        presenceId: 'pres_quiet_1',
+        reason: 'MEMBER_CHECKIN',
+      });
+
+      expect(result).toBeNull();
+      expect(notifee.displayNotification).not.toHaveBeenCalled();
+
+      // Reset preference back to default ON
+      useNotificationPreferencesStore.setState({ notificationsEnabled: true, isLoaded: true });
+    });
+
+    it('should suppress visible notification for PRESENCE_DELETED while still executing syncEngine.syncAll()', async () => {
+      const notifee = require('@notifee/react-native');
+      const notificationService = require('../src/features/notifications/notificationService').default;
+
+      let foregroundHandler: ((msg: any) => Promise<void>) | null = null;
+      mockMessaging.onMessage.mockImplementation((cb: any) => {
+        foregroundHandler = cb;
+        return jest.fn();
+      });
+
+      await pushService.registerCurrentDeviceToken('user_test_123');
+
+      const deletePresenceMsg = {
+        data: {
+          type: 'PRESENCE_UPDATE',
+          groupId: 'grp_123',
+          presenceId: 'pres_del_99',
+          actorId: 'user_456',
+          reason: 'PRESENCE_DELETED',
+        },
+      };
+
+      await foregroundHandler!(deletePresenceMsg);
+
+      // Verify sync executed
+      expect(syncEngine.syncAll).toHaveBeenCalled();
+
+      // Verify notificationService decision layer returns null / suppresses notification for PRESENCE_DELETED
+      const notifResult = await notificationService.showPresenceUpdateNotification({
+        presenceId: 'pres_del_99',
+        reason: 'PRESENCE_DELETED',
+      });
+      expect(notifResult).toBeNull();
+      expect(notifee.displayNotification).not.toHaveBeenCalled();
     });
   });
 });

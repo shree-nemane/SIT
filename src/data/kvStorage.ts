@@ -23,7 +23,7 @@ export const kvStorage = {
         [key, value, nowIso]
       );
     } catch (e) {
-      console.error('[KVStorage] Failed to setItem:', e);
+      // console.error('[KVStorage] Failed to setItem:', e);
     }
   },
 
@@ -32,7 +32,7 @@ export const kvStorage = {
       const db = getDB();
       await db.execute('DELETE FROM sync_metadata WHERE key = ?;', [key]);
     } catch (e) {
-      console.error('[KVStorage] Failed to removeItem:', e);
+      // console.error('[KVStorage] Failed to removeItem:', e);
     }
   },
 };

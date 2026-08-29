@@ -50,7 +50,7 @@ export const PresenceRepository = {
       ]);
       return true;
     } catch (error) {
-      console.error('[PresenceRepository] Check-In transaction failed:', error);
+      // console.error('[PresenceRepository] Check-In transaction failed:', error);
       return false;
     }
   },
@@ -78,7 +78,7 @@ export const PresenceRepository = {
       }
       return null;
     } catch (error) {
-      console.error('[PresenceRepository] Failed to get active presence:', error);
+      // console.error('[PresenceRepository] Failed to get active presence:', error);
       return null;
     }
   },
@@ -146,7 +146,7 @@ export const PresenceRepository = {
         })
       );
     } catch (error) {
-      console.error('[PresenceRepository] Failed to get group presences:', error);
+      // console.error('[PresenceRepository] Failed to get group presences:', error);
       return [];
     }
   },
@@ -212,7 +212,7 @@ export const PresenceRepository = {
         syncStatus: row.sync_status,
       };
     } catch (error) {
-      console.error('[PresenceRepository] Failed to get member active presence:', error);
+      // console.error('[PresenceRepository] Failed to get member active presence:', error);
       return null;
     }
   },
@@ -242,7 +242,7 @@ export const PresenceRepository = {
       ]);
       return true;
     } catch (error) {
-      console.error('[PresenceRepository] Failed to delete presence locally:', error);
+      // console.error('[PresenceRepository] Failed to delete presence locally:', error);
       return false;
     }
   },

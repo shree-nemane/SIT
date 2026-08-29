@@ -9,7 +9,7 @@ export const initNetworkSyncListener = () => {
 
   NetInfo.addEventListener((state) => {
     if (state.isConnected && state.isInternetReachable) {
-      console.log('[NetInfoListener] Internet connectivity restored. Triggering syncEngine.syncAll()...');
+      // console.log('[NetInfoListener] Internet connectivity restored. Triggering syncEngine.syncAll()...');
       syncEngine.syncAll();
     }
   });

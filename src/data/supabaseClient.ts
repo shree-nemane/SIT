@@ -44,7 +44,7 @@ export const secureStorageAdapter = {
       }
     } catch (kErr: any) {
       if (!kErr?.message?.includes('getGenericPasswordForOptions') && !kErr?.message?.includes('RNKeychainManager')) {
-        console.warn('[SecureStorage] Keychain getItem read warning:', kErr?.message || kErr);
+        // console.warn('[SecureStorage] Keychain getItem read warning:', kErr?.message || kErr);
       }
     }
 
@@ -80,18 +80,18 @@ export const secureStorageAdapter = {
             if (verify && verify.password === legacyValue) {
               // POSITIVE VERIFICATION CONFIRMED -> Delete legacy SQLite token
               await db.execute('DELETE FROM sync_metadata WHERE key = ?;', [key]).catch(() => {});
-              console.log('[SecureStorage] Successfully migrated legacy session to OS Keychain and deleted SQLite record.');
+              // console.log('[SecureStorage] Successfully migrated legacy session to OS Keychain and deleted SQLite record.');
             }
           }
         } catch (migErr) {
-          console.warn('[SecureStorage] Migration write warning (retaining SQLite token):', migErr);
+          // console.warn('[SecureStorage] Migration write warning (retaining SQLite token):', migErr);
         }
 
         // Always return legacy value so session restores even if Keychain migration fails
         return legacyValue;
       }
     } catch (sqlErr) {
-      console.warn('[SecureStorage] SQLite legacy check warning:', sqlErr);
+      // console.warn('[SecureStorage] SQLite legacy check warning:', sqlErr);
     }
 
     return null;
@@ -100,14 +100,14 @@ export const secureStorageAdapter = {
   setItem: async (key: string, value: string): Promise<void> => {
     if (!Keychain || typeof Keychain.setGenericPassword !== 'function') {
       const err = new Error('[SecureStorage] OS Keychain module unavailable. Cannot store session securely.');
-      console.error(err.message);
+      // console.error(err.message);
       throw err;
     }
 
     try {
       await Keychain.setGenericPassword('supabase_session', value, getKeychainOptions(key));
     } catch (kErr) {
-      console.error('[SecureStorage] Failed to store auth session in OS Keychain:', kErr);
+      // console.error('[SecureStorage] Failed to store auth session in OS Keychain:', kErr);
       throw kErr;
     }
   },
@@ -121,7 +121,7 @@ export const secureStorageAdapter = {
         await Keychain.resetGenericPassword({ service: key });
       }
     } catch (kErr) {
-      console.error('[SecureStorage] Keychain removeItem error:', kErr);
+      // console.error('[SecureStorage] Keychain removeItem error:', kErr);
       keychainErr = kErr;
     }
 
@@ -130,7 +130,7 @@ export const secureStorageAdapter = {
       const db = getDB();
       await db.execute('DELETE FROM sync_metadata WHERE key = ?;', [key]);
     } catch (sqlErr) {
-      console.warn('[SecureStorage] SQLite removeItem error:', sqlErr);
+      // console.warn('[SecureStorage] SQLite removeItem error:', sqlErr);
     }
 
     // Re-throw if Keychain deletion failed
@@ -141,7 +141,7 @@ export const secureStorageAdapter = {
 };
 
 if (!ENV.SUPABASE_URL || !ENV.SUPABASE_ANON_KEY) {
-  console.error('[SupabaseClient Error] Missing valid SUPABASE_URL or SUPABASE_ANON_KEY configuration.');
+  // console.error('[SupabaseClient Error] Missing valid SUPABASE_URL or SUPABASE_ANON_KEY configuration.');
 }
 
 export const supabase = createClient(ENV.SUPABASE_URL, ENV.SUPABASE_ANON_KEY, {

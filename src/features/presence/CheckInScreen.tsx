@@ -50,7 +50,7 @@ export const CheckInScreen: React.FC<CheckInScreenProps> = ({ navigation }) => {
       }
     } catch (err: any) {
       if (__DEV__) {
-        console.log('[CheckInScreen] Photo selection failed:', err);
+        // console.log('[CheckInScreen] Photo selection failed:', err);
       }
       Alert.alert('Photo Error', 'Could not select or process image. Please try again.');
     } finally {
@@ -126,7 +126,7 @@ export const CheckInScreen: React.FC<CheckInScreenProps> = ({ navigation }) => {
       }
     } catch (err: any) {
       if (__DEV__) {
-        console.log('[CheckInScreen] Check-in transaction error:', err);
+        // console.log('[CheckInScreen] Check-in transaction error:', err);
       }
       Alert.alert('Check In Failed', 'An unexpected error occurred while saving your check-in.');
     } finally {

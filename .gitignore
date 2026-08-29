@@ -5,6 +5,8 @@
 google-services.json
 GoogleService-Info.plist
 
+.agents
+
 # Font source archives (fonts extracted to assets/fonts/ — commit those, not the zip)
 manrope.zip
 

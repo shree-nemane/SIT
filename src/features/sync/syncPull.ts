@@ -10,7 +10,23 @@ export const syncPull = {
   /**
    * Pull remote changes for group, members, presences, and images (Cloud -> Local SQLite)
    */
-  async pullRemoteChanges(groupId: string): Promise<boolean> {
+  async pullRemoteChanges(
+    groupId: string,
+    shouldContinueSync?: () => boolean | Promise<boolean>
+  ): Promise<boolean> {
+    const canContinue = async (): Promise<boolean> => {
+      if (!shouldContinueSync) return true;
+      try {
+        return await shouldContinueSync();
+      } catch {
+        return false;
+      }
+    };
+
+    if (!(await canContinue())) {
+      return false;
+    }
+
     const db = getDB();
     try {
       // 1. Fetch authoritative group record from Supabase
@@ -21,7 +37,11 @@ export const syncPull = {
         .maybeSingle();
 
       if (groupErr || !remoteGroup) {
-        console.error('[SyncPull] Error fetching remote group:', groupErr);
+        // console.error('[SyncPull] Error fetching remote group:', groupErr);
+        return false;
+      }
+
+      if (!(await canContinue())) {
         return false;
       }
 
@@ -32,7 +52,7 @@ export const syncPull = {
         .eq('group_id', groupId);
 
       if (membersErr || !remoteMembers) {
-        console.error('[SyncPull] Error fetching remote members:', membersErr);
+        // console.error('[SyncPull] Error fetching remote members:', membersErr);
         return false;
       }
 
@@ -47,7 +67,7 @@ export const syncPull = {
           .in('member_id', memberIds);
 
         if (presencesErr) {
-          console.error('[SyncPull] Error fetching remote presences:', presencesErr);
+          // console.error('[SyncPull] Error fetching remote presences:', presencesErr);
           return false;
         }
         remotePresences = presencesData || [];
@@ -70,10 +90,14 @@ export const syncPull = {
           .in('id', Array.from(imageIdsToFetch));
 
         if (imagesErr) {
-          console.error('[SyncPull] Error fetching remote images metadata:', imagesErr);
+          // console.error('[SyncPull] Error fetching remote images metadata:', imagesErr);
           return false;
         }
         remoteImages = imagesData || [];
+      }
+
+      if (!(await canContinue())) {
+        return false;
       }
 
       // Media Downloader Pipeline (Sync Engine layer exclusively downloads media to persistent local disk)
@@ -113,11 +137,15 @@ export const syncPull = {
                   }
                 }
               } catch (sErr) {
-                console.warn('[SyncPull] Warning downloading media file for:', img.storage_path, sErr);
+                // console.warn('[SyncPull] Warning downloading media file for:', img.storage_path, sErr);
               }
             }
           })
         );
+      }
+
+      if (!(await canContinue())) {
+        return false;
       }
 
       const batchStatements: Array<[string, any[]]> = [];
@@ -224,17 +252,29 @@ export const syncPull = {
         [newSyncTimestamp, newSyncTimestamp],
       ]);
 
+      // Re-verify live membership status right before committing group-scoped SQLite transaction
+      if (!(await canContinue())) {
+        if (__DEV__) {
+          console.log('[SyncPull] Membership/Auth status invalid during sync pull. Discarding group updates.');
+        }
+        return false;
+      }
+
       // 5. Execute atomic SQLite transaction
       if (batchStatements.length > 0) {
         await db.executeBatch(batchStatements);
-        console.log(`[SyncPull] Atomic transaction applied ${batchStatements.length} statements to local database.`);
+        // console.log(`[SyncPull] Atomic transaction applied ${batchStatements.length} statements to local database.`);
+      }
+
+      if (!(await canContinue())) {
+        return false;
       }
 
       // 6. Update single widget snapshot projection & issue notification once per sync batch
       await widgetSnapshotService.updateAndNotifyWidget();
       return true;
     } catch (error) {
-      console.error('[SyncPull] Reconciliation error:', error);
+      // console.error('[SyncPull] Reconciliation error:', error);
       return false;
     }
   },

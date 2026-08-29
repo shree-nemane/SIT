@@ -1,6 +1,11 @@
 import { supabase } from './supabaseClient';
 import { UserMember } from '../features/auth/types';
 
+export type MemberLookupResult =
+  | { status: 'found'; member: UserMember }
+  | { status: 'not_found' }
+  | { status: 'error'; error: string };
+
 export const api = {
   /**
    * Initiate Google OAuth Sign-In with Supabase
@@ -23,7 +28,7 @@ export const api = {
   /**
    * Fetch member details for authenticated user
    */
-  async getCurrentMember(userId: string): Promise<UserMember | null> {
+  async getCurrentMember(userId: string): Promise<MemberLookupResult> {
     try {
       const { data, error } = await supabase
         .from('members')
@@ -31,17 +36,26 @@ export const api = {
         .eq('id', userId)
         .maybeSingle();
 
-      if (error || !data) return null;
+      if (error) {
+        return { status: 'error', error: error.message };
+      }
+
+      if (!data) {
+        return { status: 'not_found' };
+      }
 
       return {
-        id: data.id,
-        groupId: data.group_id,
-        displayName: data.display_name,
-        profileImageId: data.profile_image_id,
-        joinedAt: data.joined_at,
+        status: 'found',
+        member: {
+          id: data.id,
+          groupId: data.group_id,
+          displayName: data.display_name,
+          profileImageId: data.profile_image_id,
+          joinedAt: data.joined_at,
+        },
       };
-    } catch {
-      return null;
+    } catch (e: any) {
+      return { status: 'error', error: e?.message || 'Failed to query member profile' };
     }
   },
 

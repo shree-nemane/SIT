@@ -2,6 +2,87 @@
 
 All notable changes, architectural decisions, database schema migrations, and bug fixes for **Stay in Touch** are documented in this file chronologically.
 
+## [0.5.0] - 2026-08-26
+
+### Security Hardening (VULN-01 to VULN-07)
+
+* **Priority 1 / VULN-05 — OAuth Deep Link Hardening**:
+  * Added `onNewIntent(intent: Intent)` override in `MainActivity.kt` calling `setIntent(intent)` to ensure Google OAuth custom scheme callbacks (`sit://auth/callback`) reach React Native `Linking` when resumed in `singleTask` mode.
+  * Hardened URL validation in `authStore.ts` with strict scheme (`sit:`), host (`auth`), path (`/callback`), and parameter prototype pollution protection (`__proto__`, `constructor`, `prototype`).
+  * Updated deep-link handler to parse both PKCE query codes (`?code=...`) and hash fragment credentials (`#access_token=...`).
+
+* **Priority 2 / VULN-03 — OS Secure Storage & Session Persistence**:
+  * Implemented `secureStorageAdapter` in `supabaseClient.ts` using OS-backed Keychain / Android `EncryptedSharedPreferences` (`ACCESSIBLE.AFTER_FIRST_UNLOCK`).
+  * Completely eliminated plaintext auth token persistence in local SQLite, closing the VULN-03 security boundary.
+  * Implemented an idempotent legacy migration layer in `getItem()` that reads legacy SQLite sessions, writes to OS Keychain, verifies read-back, and deletes the SQLite row cleanly.
+  * Added platform-safe `getKeychainOptions(key)` restricting iOS-specific keychain flags to iOS only, preventing `IllegalArgumentException` crashes on native Android.
+
+* **Priority 3 / VULN-01 — Storage RLS Isolation & Fail-Closed Path Parsing**:
+  * Updated `supabase/migrations/00010_security_hardening.sql` with hardened `storage.objects` RLS policies.
+  * Enforced same-group read isolation comparing `uploader.group_id = caller.group_id` via text-based folder comparison `uploader.id::text = (storage.foldername(name))[1]`.
+  * Enforced uploader own-namespace restrictions on `INSERT` and `DELETE` (`(storage.foldername(name))[1] = auth.uid()::text AND (storage.foldername(name))[2] IN ('presence', 'profile')`).
+  * Verified isolation with a dedicated database test suite (`supabase/tests/00010_storage_rls_test.sql`).
+
+* **Priority 4 / VULN-04 — Invitation Code Brute-Force & Rate Limiting**:
+  * Created `public.join_attempts` table and non-throwing atomic `join_group_with_code` RPC in `00010_security_hardening.sql`.
+  * Enforced a 15-minute lockout after 5 failed invitation attempts per user. Returns structured JSON error objects, preventing PostgreSQL transaction rollbacks and counter erasures.
+  * Concurrency serialized using `ON CONFLICT (user_id) DO UPDATE` atomic counter increments and `SELECT ... FOR UPDATE` row-locking on single-use invitation codes.
+  * Verified concurrency with database test suite (`supabase/tests/00010_concurrency_test.sql`).
+
+* **VULN-06 — FCM Push Device Token Ownership Model**:
+  * Hardened `register_push_device` RPC in `00008_push_devices.sql` using token-level advisory transaction locks (`PERFORM pg_advisory_xact_lock(hashtext(v_clean_token))`).
+  * Validated platform enum against `'android'`, `'ios'`, `'web'`.
+  * Reassigns tokens to new users only if the previous user signed out (`is_active = FALSE`). Active token hijacking attempts by another user are denied.
+  * Sanitized RPC exception handling to prevent internal schema disclosures (`SQLERRM`).
+  * Verified with database test suite (`supabase/tests/00008_push_devices_test.sql`).
+
+* **VULN-07 — Fail-Closed Edge Function CORS**:
+  * Updated `supabase/functions/dispatch-presence-push/index.ts` to enforce strict fail-closed `Access-Control-Allow-Origin` header emission.
+  * Removed wildcard origins, prefix-matching subdomains (`localhost.attacker.com`), and explicit `'null'` origins.
+  * Added `Vary: Origin` header to prevent HTTP cache poisoning across different origin callers.
+
+### Changed & Fixed
+
+* **App Initialization Synchronization (`App.tsx`)**:
+  * Fixed a cold-start race condition where `<RootNavigator />` mounted and triggered `initializeAuth()` before SQLite database schema creation statements (`initDatabase()`) completed.
+  * Added `isDbReady` state in `App.tsx` to hold app rendering on `<SplashScreen />` until `initDatabase()` resolves, ensuring SQLite schema tables (`members`, `presences`, `groups`, `sync_metadata`) exist before any auth queries run.
+
+* **Auth Store Architecture & Initialization Guards (`authStore.ts`)**:
+  * Introduced `authInitializePromise` singleton promise lock in `initializeAuth()`, preventing double-execution when multiple React components trigger initialization on mount.
+  * Introduced `sessionVerificationStatus` (`'verified' | 'offline' | 'unknown'`) to distinguish online verified sessions from valid offline local sessions.
+  * Added `getSession()` transient error recovery that attempts local member lookup before initiating a logout.
+
+* **Sync Engine Reliability (`syncPull.ts`, `syncPush.ts`)**:
+  * Added mid-sync membership revocation guard in `syncPull.ts` that re-checks `membershipStatus === 'member'` immediately prior to executing local SQLite batch updates, discarding group sync updates if membership was revoked during an in-flight sync.
+  * Added queue poisoning defense in `syncPush.ts` that automatically discards un-syncable items with `retryCount > 5` (`DELETE FROM sync_queue WHERE id = ?`).
+  * Suppressed verbose debug console logs across production sync modules (`syncEngine.ts`, `syncPull.ts`, `syncPush.ts`, `authStore.ts`, `pushService.ts`).
+
+---
+
+## [0.5.1] - 2026-08-29
+
+### Added
+
+* **Durable Headless Background Runtime (`backgroundRuntime.ts`, `syncValidator.ts`)**:
+  * Added `bootstrapBackgroundRuntime()` to initialize the local SQLite database and restore the durable Supabase session required for background execution without any network-dependent bootstrap steps.
+  * Added `SyncExecutionContextValidator` to validate the active session, user ID, group ID, and membership status at key checkpoints (`pre_fetch`, `pre_commit`, `post_commit`).
+  * Ensured headless sync aborts safely when the auth session is missing, the user is signed out, or the local member/group membership is no longer valid.
+
+* **Background Sync Safety & Session-Bound Execution (`syncEngine.ts`, `syncPull.ts`, `backgroundSyncTask.ts`)**:
+  * Reworked the active sync lock so it reuses only for the same live `sessionToken` + `userId` + `groupId` tuple, preventing stale lock reuse across sign-outs, user switches, or revoked memberships.
+  * Added guarded commit checks before local reconciliation and widget notifications so a stale runtime cannot write invalid state after session invalidation.
+  * Updated the headless task entry point to bootstrap durable runtime context before invoking the main sync engine.
+
+* **OS Notification Permission Helper (`notificationPermissionHelper.ts`)**:
+  * Added a dependency-free Android/iOS permission check for notification access, including Android 13+ `POST_NOTIFICATIONS` handling.
+  * Returns false cleanly when the OS denies permission or the platform check fails, preventing unsafe notification behavior on unsupported or blocked devices.
+
+### Changed
+
+* **Session-Bound Sync & Widget Regression Coverage**:
+  * Added headless sync regression tests in `__tests__/headlessBackgroundSync.test.ts` covering durable bootstrap, session revocation, missing member/group fallback, and source propagation.
+  * Added session-bound sync reliability tests in `__tests__/sessionBoundSync.test.ts` covering widget guard behavior, sign-out cleanup, and stale active-sync lock lifecycle recovery.
+
 ---
 
 ## [0.4.0] - 2026-08-24

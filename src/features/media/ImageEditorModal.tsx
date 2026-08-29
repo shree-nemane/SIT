@@ -57,7 +57,7 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
           }
         },
         (err) => {
-          console.warn('[ImageEditorModal] Failed to get image size:', err);
+          // console.warn('[ImageEditorModal] Failed to get image size:', err);
         }
       );
     }
@@ -142,7 +142,7 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
         });
       }
     } catch (err) {
-      console.error('[ImageEditorModal] Apply crop error:', err);
+      // console.error('[ImageEditorModal] Apply crop error:', err);
       setIsProcessing(false);
       onClose();
     }

@@ -7,35 +7,38 @@ import { RootNavigator } from './src/navigation/RootNavigator';
 import { SplashScreen } from './src/components/SplashScreen';
 import { initDatabase } from './src/database/db';
 import { initNetworkSyncListener } from './src/features/sync/netInfoListener';
-import { syncEngine } from './src/features/sync/syncEngine';
 import { colors } from './src/theme/theme';
-
+import { useAuthStore } from './src/features/auth/authStore';
 import { useNotificationPreferencesStore } from './src/features/notifications/notificationPreferencesStore';
 
 function App() {
   const [isDbReady, setIsDbReady] = useState(false);
+  const isAuthInitialized = useAuthStore((s) => s.isAuthInitialized);
+  const initializeAuth = useAuthStore((s) => s.initializeAuth);
 
   useEffect(() => {
-    // Early restore of notification preferences
+    // 1. Early restore of notification preferences
     useNotificationPreferencesStore.getState().loadPreferences();
 
-    // 1. Initialize local SQLite database schema first
+    // 2. Ordered Startup Sequence: Database initialization -> Auth & Member resolution
     initDatabase()
       .then(() => {
         setIsDbReady(true);
-        // 2. Initialize network listener & trigger startup sync
         initNetworkSyncListener();
-        syncEngine.syncAll();
+        // 3. Initialize Auth bootstrap strictly after SQLite is ready (schedulePostBootstrapWork handles sync)
+        initializeAuth();
       })
       .catch((err) => {
-        console.error('[App] Database initialization error:', err);
+        if (__DEV__) {
+          console.log('[App] Database initialization warning:', err);
+        }
         setIsDbReady(true);
+        initializeAuth();
       });
-  }, []);
+  }, [initializeAuth]);
 
-  if (!isDbReady) {
-    return <SplashScreen />;
-  }
+  // Single Authoritative Startup Readiness Condition
+  const isAppReady = isDbReady && isAuthInitialized;
 
   return (
     <ErrorBoundary>
@@ -45,7 +48,7 @@ function App() {
             barStyle="light-content"
             backgroundColor={colors.background}
           />
-          <RootNavigator />
+          {isAppReady ? <RootNavigator /> : <SplashScreen />}
         </SafeAreaProvider>
       </QueryClientProvider>
     </ErrorBoundary>
