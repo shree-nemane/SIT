@@ -190,24 +190,23 @@ export const CheckInScreen: React.FC<CheckInScreenProps> = ({ navigation }) => {
           <View style={styles.imagePreviewWrapper}>
             <Image
               source={{ uri: selectedImage.localPath }}
-              style={styles.imagePreview}
-              resizeMode="cover"
+              style={[
+                styles.imagePreview,
+                {
+                  aspectRatio:
+                    selectedImage.width && selectedImage.height
+                      ? selectedImage.width / selectedImage.height
+                      : 16 / 9,
+                },
+              ]}
+              resizeMode="contain"
             />
             <View style={styles.imageActionsOverlay}>
-              {/* COMMENTED OUT FOR NOW - ADJUST FRAMING FEATURE
-              <TouchableOpacity
-                style={styles.adjustFramingBtn}
-                onPress={() => setEditorVisible(true)}
-                activeOpacity={0.8}
-              >
-                <Text style={styles.adjustFramingText}>📐 Adjust framing</Text>
-              </TouchableOpacity>
-              */}
-
               <TouchableOpacity
                 style={styles.removeImageBtn}
                 onPress={() => setSelectedImage(null)}
                 activeOpacity={0.8}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
               >
                 <Text style={styles.removeImageText}>✕ Remove</Text>
               </TouchableOpacity>
@@ -327,7 +326,7 @@ const styles = StyleSheet.create({
   },
   imagePreview: {
     width: '100%',
-    height: 180,
+    maxHeight: 260,
     borderRadius: borderRadius.md,
     alignSelf: 'center',
   },

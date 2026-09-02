@@ -3,7 +3,7 @@ import { StyleSheet, Text, View, Linking } from 'react-native';
 import { ScreenContainer } from '../../components/ui/ScreenContainer';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
-import { colors, spacing, typography, borderRadius } from '../../theme/theme';
+import { colors, spacing, typography, borderRadius, fonts } from '../../theme/theme';
 import { useAuthStore } from './authStore';
 import { api } from '../../data/api';
 
@@ -65,21 +65,27 @@ const styles = StyleSheet.create({
     marginTop: spacing.xxl,
   },
   logoBadge: {
-    width: 56,
-    height: 56,
-    borderRadius: borderRadius.lg,
-    backgroundColor: 'rgba(245, 158, 11, 0.08)',
+    width: 60,
+    height: 60,
+    borderRadius: 18,
+    backgroundColor: colors.surfaceAmber,
     borderColor: colors.primary,
     borderWidth: 1.5,
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: spacing.md,
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 3,
   },
   logoBadgeText: {
     color: colors.primary,
     fontSize: typography.fontSizes.lg,
     fontWeight: typography.weights.heavy,
-    letterSpacing: 1,
+    letterSpacing: 2.5,
+    fontFamily: fonts.manrope.bold,
   },
   brandTitle: {
     color: colors.textPrimary,

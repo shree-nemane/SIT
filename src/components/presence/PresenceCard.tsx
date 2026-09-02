@@ -80,7 +80,12 @@ export const PresenceCard: React.FC<PresenceCardProps> = ({
         <HumanSyncBar status={item.syncStatus as any} />
 
         {isOwn && onClearStatus && (
-          <TouchableOpacity onPress={onClearStatus} style={styles.clearBtn} activeOpacity={0.7}>
+          <TouchableOpacity
+            onPress={onClearStatus}
+            style={styles.clearBtn}
+            activeOpacity={0.7}
+            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+          >
             <Text variant="micro" style={styles.clearBtnText}>Clear Status</Text>
           </TouchableOpacity>
         )}

@@ -65,7 +65,12 @@ export const MemberDetailScreen: React.FC<{ route: any; navigation: any }> = ({
   if (isLoading) {
     return (
       <ScreenContainer edges={['top']} style={styles.container}>
-        <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()} activeOpacity={0.7}>
+        <TouchableOpacity
+          style={styles.backBtn}
+          onPress={() => navigation.goBack()}
+          activeOpacity={0.7}
+          hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+        >
           <Text variant="bodySmall" style={styles.backBtnText}>← Back</Text>
         </TouchableOpacity>
       </ScreenContainer>
@@ -76,7 +81,12 @@ export const MemberDetailScreen: React.FC<{ route: any; navigation: any }> = ({
     <ScreenContainer edges={['top']} scrollable contentContainerStyle={styles.scrollContent}>
       <View style={styles.container}>
         {/* NAV BACK BAR */}
-        <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()} activeOpacity={0.7}>
+        <TouchableOpacity
+          style={styles.backBtn}
+          onPress={() => navigation.goBack()}
+          activeOpacity={0.7}
+          hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+        >
           <Text variant="bodySmall" style={styles.backBtnText}>← Back</Text>
         </TouchableOpacity>
 

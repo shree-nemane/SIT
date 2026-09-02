@@ -172,7 +172,12 @@ export const HomeScreen: React.FC<{ route: any; navigation: any }> = ({ route, n
               <Text variant="bodySmall" style={styles.undoToastText} numberOfLines={1}>
                 Status updated: "{undoText}"
               </Text>
-              <TouchableOpacity style={styles.undoToastBtn} onPress={handleUndoCheckIn} activeOpacity={0.8}>
+              <TouchableOpacity
+                style={styles.undoToastBtn}
+                onPress={handleUndoCheckIn}
+                activeOpacity={0.8}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
                 <Text variant="label" style={styles.undoToastBtnText}>Undo</Text>
               </TouchableOpacity>
             </View>
@@ -197,8 +202,8 @@ export const HomeScreen: React.FC<{ route: any; navigation: any }> = ({ route, n
             />
           )}
 
-          {/* YOUR STATUS ROW (QUIET INLINE CONTAINER - NO GLOW, INLINE CHECK IN CTA) */}
-          <View style={styles.selfSectionCard}>
+          {/* YOUR STATUS SECTION (FLATTENED SURFACE HIERARCHY — NO CARD-IN-CARD NESTING) */}
+          <View style={styles.selfSection}>
             <View style={styles.selfHeaderRow}>
               <Text variant="micro" style={styles.sectionHeaderText}>YOUR STATUS</Text>
               <Button
@@ -216,9 +221,11 @@ export const HomeScreen: React.FC<{ route: any; navigation: any }> = ({ route, n
                 onClearStatus={() => handleRequestClearPresence(myPresenceItem.memberId)}
               />
             ) : (
-              <Text variant="bodySmall" style={styles.noStatusText}>
-                You haven't posted a status today. Tap + Check In to update your circle.
-              </Text>
+              <View style={styles.noStatusBox}>
+                <Text variant="bodySmall" style={styles.noStatusText}>
+                  You haven't posted a status today. Tap + Check In to update your circle.
+                </Text>
+              </View>
             )}
           </View>
 
@@ -273,7 +280,7 @@ const styles = StyleSheet.create({
     paddingBottom: 90,
   },
   contentPadding: {
-    padding: spacing.md,
+    paddingVertical: spacing.md,
   },
   header: {
     marginTop: spacing.xs,
@@ -330,18 +337,21 @@ const styles = StyleSheet.create({
   offlineText: {
     color: colors.textMuted,
   },
-  selfSectionCard: {
-    backgroundColor: colors.surface,
-    borderColor: colors.surfaceBorder,
-    borderWidth: 1,
-    borderRadius: borderRadius.md,
-    padding: spacing.md,
-    marginBottom: spacing.lg,
+  selfSection: {
+    marginBottom: spacing.md,
   },
   selfHeaderRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    marginBottom: spacing.sm,
+  },
+  noStatusBox: {
+    backgroundColor: colors.surface,
+    borderColor: colors.surfaceBorder,
+    borderWidth: 1,
+    borderRadius: borderRadius.md,
+    padding: spacing.md,
     marginBottom: spacing.sm,
   },
   sectionHeaderText: {

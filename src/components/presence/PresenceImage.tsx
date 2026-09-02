@@ -15,7 +15,9 @@ export const PresenceImage: React.FC<PresenceImageProps> = ({ uri, style }) => {
       Image.getSize(
         uri,
         (w, h) => {
-          if (w > 0 && h > 0) setAspectRatio(w / h);
+          if (w > 0 && h > 0) {
+            setAspectRatio(w / h);
+          }
         },
         () => {}
       );
@@ -26,8 +28,11 @@ export const PresenceImage: React.FC<PresenceImageProps> = ({ uri, style }) => {
     <View style={[styles.imageContainer, style]}>
       <Image
         source={{ uri }}
-        style={[styles.image, { aspectRatio: aspectRatio || 1.777 }]}
-        resizeMode="cover"
+        style={[
+          styles.image,
+          { aspectRatio: aspectRatio > 0 ? aspectRatio : 16 / 9 },
+        ]}
+        resizeMode="contain"
       />
     </View>
   );
@@ -36,21 +41,18 @@ export const PresenceImage: React.FC<PresenceImageProps> = ({ uri, style }) => {
 const styles = StyleSheet.create({
   imageContainer: {
     width: '100%',
-    maxWidth: '100%',
-    maxHeight: 360,
     borderRadius: borderRadius.md,
     overflow: 'hidden',
     marginTop: spacing.sm,
     marginBottom: spacing.xs,
     alignItems: 'center',
     justifyContent: 'center',
-    alignSelf: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.25)',
   },
   image: {
     width: '100%',
-    maxHeight: 360,
+    maxHeight: 420,
     borderRadius: borderRadius.md,
-    alignSelf: 'center',
   },
 });
 
